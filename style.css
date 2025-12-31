@@ -1,0 +1,252 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #f5f5f5;
+  min-height: 100vh;
+  color: #000;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.game-header {
+  text-align: center;
+}
+
+.game-header h1 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  color: #666;
+  margin-top: 4px;
+}
+
+.game-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.scoreboard {
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  padding: 10px 30px;
+  background: #fff;
+  border-radius: 30px;
+  border: 1px solid #ddd;
+}
+
+.player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #000;
+}
+
+.player-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.player-wins {
+  font-size: 1.5rem;
+  font-weight: 700;
+  min-width: 30px;
+  text-align: center;
+}
+
+.vs {
+  font-size: 0.9rem;
+  color: #999;
+}
+
+.canvas-wrapper {
+  position: relative;
+  border: 2px solid #000;
+  background: #fff;
+}
+
+#gameCanvas {
+  display: block;
+}
+
+.countdown {
+  display: none;
+}
+
+.winner-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.9);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.winner-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.winner-text {
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.controls {
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 10px 20px;
+  border: 2px solid #000;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+  background: #fff;
+  color: #000;
+}
+
+.btn:hover {
+  background: #000;
+  color: #fff;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+  background: #fff;
+  color: #000;
+}
+
+.btn-icon {
+  font-size: 1rem;
+}
+
+.settings-panel {
+  background: #fff;
+  padding: 20px 25px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  width: 100%;
+  max-width: 400px;
+}
+
+.settings-panel h3 {
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  color: #666;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.setting:last-child {
+  margin-bottom: 0;
+}
+
+.setting label {
+  flex: 0 0 90px;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.setting input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: #ddd;
+  outline: none;
+}
+
+.setting input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #000;
+  cursor: pointer;
+}
+
+.setting span {
+  flex: 0 0 40px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.game-footer {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .game-header h1 {
+    font-size: 1.4rem;
+  }
+
+  .scoreboard {
+    padding: 8px 20px;
+    gap: 15px;
+  }
+
+  .player-name {
+    display: none;
+  }
+
+  .controls {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .btn {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+  }
+}
