@@ -105,6 +105,7 @@ class Game {
     this.saveTrackBtn = document.getElementById("saveTrackBtn");
     this.refreshTracksBtn = document.getElementById("refreshTracksBtn");
     this.trackList = document.getElementById("trackList");
+    this.mergeTrackCheckbox = document.getElementById("mergeTrack");
     this.avatarOverlay = document.getElementById("avatarOverlay");
     this.avatarDivs = []; // HTML divs for high-quality avatar rendering
     this.avatarDataUrls = []; // Store original data URLs for high-quality rendering
@@ -1966,42 +1967,47 @@ class Game {
     return trackData;
   }
 
-  importTrack(trackData) {
-    // Clear current track properly (removes from physics engine)
-    this.clearTrack();
+  importTrack(trackData, merge = false) {
+    if (!merge) {
+      // Clear current track properly (removes from physics engine)
+      this.clearTrack();
 
-    // Set resolution first
-    if (trackData.resolution && this.resolutions[trackData.resolution]) {
-      this.setResolution(trackData.resolution);
-      // Update UI button
-      this.resolutionButtons.forEach((btn) => {
-        btn.classList.toggle(
-          "active",
-          btn.dataset.resolution === trackData.resolution
-        );
-      });
-    }
+      // Set resolution first
+      if (trackData.resolution && this.resolutions[trackData.resolution]) {
+        this.setResolution(trackData.resolution);
+        // Update UI button
+        this.resolutionButtons.forEach((btn) => {
+          btn.classList.toggle(
+            "active",
+            btn.dataset.resolution === trackData.resolution
+          );
+        });
+      }
 
-    // Set track length
-    if (trackData.trackLength) {
-      this.setTrackLength(trackData.trackLength);
-      // Update UI slider
-      if (this.trackLengthSlider) {
-        this.trackLengthSlider.value = trackData.trackLength;
-        this.trackLengthValue.textContent = trackData.trackLength;
+      // Set track length
+      if (trackData.trackLength) {
+        this.setTrackLength(trackData.trackLength);
+        // Update UI slider
+        if (this.trackLengthSlider) {
+          this.trackLengthSlider.value = trackData.trackLength;
+          this.trackLengthValue.textContent = trackData.trackLength;
+        }
+      }
+
+      // Set game mode
+      if (trackData.gameMode) {
+        this.gameMode = trackData.gameMode;
+        // Update UI buttons
+        this.modeButtons.forEach((btn) => {
+          btn.classList.toggle(
+            "active",
+            btn.dataset.mode === trackData.gameMode
+          );
+        });
       }
     }
 
-    // Set game mode
-    if (trackData.gameMode) {
-      this.gameMode = trackData.gameMode;
-      // Update UI buttons
-      this.modeButtons.forEach((btn) => {
-        btn.classList.toggle("active", btn.dataset.mode === trackData.gameMode);
-      });
-    }
-
-    // Import obstacles
+    // Import obstacles (always - either replace or merge)
     for (const obs of trackData.obstacles) {
       if (obs.type === "rectangle") {
         this.addObstacle(obs.x, obs.y, obs.width, obs.height, obs.angle);
@@ -2137,8 +2143,14 @@ class Game {
 
       if (error) throw error;
 
-      this.importTrack(data.track_data);
-      alert(`Wczytano trasę: ${data.name}`);
+      const merge = this.mergeTrackCheckbox.checked;
+      this.importTrack(data.track_data, merge);
+
+      if (merge) {
+        alert(`Dodano trasę: ${data.name}`);
+      } else {
+        alert(`Wczytano trasę: ${data.name}`);
+      }
     } catch (err) {
       console.error("Błąd wczytywania:", err);
       alert("Błąd wczytywania: " + err.message);
