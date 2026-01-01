@@ -99,6 +99,12 @@ class Game {
     this.introOverlay = document.getElementById("introOverlay");
     this.introContent = document.getElementById("introContent");
     this.modeButtons = document.querySelectorAll(".mode-btn");
+
+    // Track management elements
+    this.trackNameInput = document.getElementById("trackName");
+    this.saveTrackBtn = document.getElementById("saveTrackBtn");
+    this.refreshTracksBtn = document.getElementById("refreshTracksBtn");
+    this.trackList = document.getElementById("trackList");
     this.avatarOverlay = document.getElementById("avatarOverlay");
     this.avatarDivs = []; // HTML divs for high-quality avatar rendering
     this.avatarDataUrls = []; // Store original data URLs for high-quality rendering
@@ -154,7 +160,10 @@ class Game {
     this.canvasWrapper.style.maxHeight = `${Math.min(this.height, 700)}px`;
     // Generate avatar input fields for current number of balls
     this.generateAvatarInputs();
-    this.generateTrack();
+    // Start with empty track - user can click "Losowy tor" or load from DB
+    this.createPlayers();
+    // Initialize Supabase for track storage
+    this.initSupabase();
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
@@ -164,6 +173,10 @@ class Game {
     this.editBtn.addEventListener("click", () => this.toggleEditMode());
     this.clearTrackBtn.addEventListener("click", () => this.clearTrack());
     this.randomTrackBtn.addEventListener("click", () => this.generateTrack());
+
+    // Track management
+    this.saveTrackBtn.addEventListener("click", () => this.saveTrack());
+    this.refreshTracksBtn.addEventListener("click", () => this.loadTrackList());
 
     // Game mode selection
     this.modeButtons.forEach((btn) => {
@@ -452,7 +465,8 @@ class Game {
     this.avatarOverlay.style.height = `${this.height}px`;
     this.physics.setBounds(0, this.width, 0, this.height);
     this.finishLine = this.height - 40;
-    this.generateTrack();
+    // Don't auto-generate track - user decides when to generate
+    this.resetPlayers();
   }
 
   setResolution(resolutionKey) {
@@ -481,8 +495,8 @@ class Game {
     // Update canvas wrapper max-height based on resolution
     this.canvasWrapper.style.maxHeight = `${Math.min(res.height, 700)}px`;
 
-    // Regenerate track for new dimensions
-    this.generateTrack();
+    // Don't auto-generate track - user decides when to generate
+    this.resetPlayers();
   }
 
   toggleEditMode() {
@@ -1282,8 +1296,8 @@ class Game {
     this.physics.addBody(obstacle);
   }
 
-  addWindmill(x, y, armLength, speed, direction) {
-    const windmill = new Windmill(x, y, armLength, 4);
+  addWindmill(x, y, armLength, speed, direction, numArms = 4) {
+    const windmill = new Windmill(x, y, armLength, numArms);
     windmill.rotationSpeed = speed;
     windmill.direction = direction;
     this.windmills.push(windmill);
@@ -1891,6 +1905,282 @@ class Game {
       this.introOverlay.appendChild(confetti);
     }
   }
+
+  // ==================== SUPABASE / TRACK MANAGEMENT ====================
+
+  initSupabase() {
+    // KONFIGURACJA - uzupełnij swoimi danymi z Supabase
+    const SUPABASE_URL = "https://dxobcisdnaletsqxbvum.supabase.co";
+    const SUPABASE_ANON_KEY =
+      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4b2JjaXNkbmFsZXRzcXhidnVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyOTE1MzEsImV4cCI6MjA4Mjg2NzUzMX0.3Asyno_0bVQcgM7oo0weBzwTNUecbxW0dEgdp6Gs6Fk";
+
+    if (SUPABASE_URL === "YOUR_SUPABASE_URL") {
+      console.warn(
+        "Supabase nie skonfigurowany - uzupełnij SUPABASE_URL i SUPABASE_ANON_KEY w game.js"
+      );
+      this.supabase = null;
+      return;
+    }
+
+    this.supabase = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+    this.loadTrackList();
+  }
+
+  exportTrack() {
+    const trackData = {
+      version: 1,
+      trackLength: this.height,
+      gameMode: this.gameMode,
+      resolution: this.currentResolution,
+      obstacles: [],
+    };
+
+    // Export beams
+    for (const obs of this.obstacles) {
+      trackData.obstacles.push({
+        type: "rectangle",
+        x: obs.position.x,
+        y: obs.position.y,
+        width: obs.width,
+        height: obs.height,
+        angle: obs.angle,
+      });
+    }
+
+    // Export windmills
+    for (const wm of this.windmills) {
+      trackData.obstacles.push({
+        type: "windmill",
+        x: wm.position.x,
+        y: wm.position.y,
+        size: wm.armLength,
+        speed: wm.rotationSpeed,
+        direction: wm.direction,
+        numArms: wm.armCount,
+      });
+    }
+
+    return trackData;
+  }
+
+  importTrack(trackData) {
+    // Clear current track properly (removes from physics engine)
+    this.clearTrack();
+
+    // Set resolution first
+    if (trackData.resolution && this.resolutions[trackData.resolution]) {
+      this.setResolution(trackData.resolution);
+      // Update UI button
+      this.resolutionButtons.forEach((btn) => {
+        btn.classList.toggle(
+          "active",
+          btn.dataset.resolution === trackData.resolution
+        );
+      });
+    }
+
+    // Set track length
+    if (trackData.trackLength) {
+      this.setTrackLength(trackData.trackLength);
+      // Update UI slider
+      if (this.trackLengthSlider) {
+        this.trackLengthSlider.value = trackData.trackLength;
+        this.trackLengthValue.textContent = trackData.trackLength;
+      }
+    }
+
+    // Set game mode
+    if (trackData.gameMode) {
+      this.gameMode = trackData.gameMode;
+      // Update UI buttons
+      this.modeButtons.forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.mode === trackData.gameMode);
+      });
+    }
+
+    // Import obstacles
+    for (const obs of trackData.obstacles) {
+      if (obs.type === "rectangle") {
+        this.addObstacle(obs.x, obs.y, obs.width, obs.height, obs.angle);
+      } else if (obs.type === "windmill") {
+        this.addWindmill(
+          obs.x,
+          obs.y,
+          obs.size,
+          obs.speed,
+          obs.direction,
+          obs.numArms || 4
+        );
+      }
+    }
+
+    this.resetPlayers();
+  }
+
+  async saveTrack() {
+    if (!this.supabase) {
+      alert(
+        "Supabase nie jest skonfigurowany.\nUzupełnij SUPABASE_URL i SUPABASE_ANON_KEY w game.js"
+      );
+      return;
+    }
+
+    const name = this.trackNameInput.value.trim();
+    if (!name) {
+      alert("Podaj nazwę trasy");
+      return;
+    }
+
+    this.saveTrackBtn.disabled = true;
+    this.saveTrackBtn.textContent = "⏳ Zapisuję...";
+
+    try {
+      const { data, error } = await this.supabase
+        .from("tracks")
+        .insert({
+          name: name,
+          track_data: this.exportTrack(),
+          game_mode: this.gameMode,
+          resolution: this.currentResolution,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      this.trackNameInput.value = "";
+      await this.loadTrackList();
+      alert("Trasa zapisana!");
+    } catch (err) {
+      console.error("Błąd zapisu:", err);
+      alert("Błąd zapisu: " + err.message);
+    } finally {
+      this.saveTrackBtn.disabled = false;
+      this.saveTrackBtn.textContent = "💾 Zapisz";
+    }
+  }
+
+  async loadTrackList() {
+    if (!this.supabase) {
+      this.trackList.innerHTML =
+        '<div class="track-list-empty">Supabase nie skonfigurowany</div>';
+      return;
+    }
+
+    this.trackList.innerHTML = '<div class="track-loading">Ładowanie...</div>';
+
+    try {
+      const { data, error } = await this.supabase
+        .from("tracks")
+        .select("id, name, game_mode, created_at")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        this.trackList.innerHTML =
+          '<div class="track-list-empty">Brak zapisanych tras</div>';
+        return;
+      }
+
+      this.trackList.innerHTML = "";
+      for (const track of data) {
+        const item = document.createElement("div");
+        item.className = "track-item";
+        item.innerHTML = `
+          <div class="track-item-info">
+            <div class="track-item-name">${this.escapeHtml(track.name)}</div>
+            <div class="track-item-meta">${
+              track.game_mode || "stages"
+            } • ${this.formatDate(track.created_at)}</div>
+          </div>
+          <div class="track-item-actions">
+            <button class="track-item-btn load" data-id="${track.id}">▶</button>
+            <button class="track-item-btn delete" data-id="${
+              track.id
+            }">✕</button>
+          </div>
+        `;
+
+        item.querySelector(".load").addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.loadTrack(track.id);
+        });
+
+        item.querySelector(".delete").addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.deleteTrack(track.id, track.name);
+        });
+
+        this.trackList.appendChild(item);
+      }
+    } catch (err) {
+      console.error("Błąd ładowania listy:", err);
+      this.trackList.innerHTML =
+        '<div class="track-error">Błąd ładowania tras</div>';
+    }
+  }
+
+  async loadTrack(trackId) {
+    if (!this.supabase) return;
+
+    try {
+      const { data, error } = await this.supabase
+        .from("tracks")
+        .select("*")
+        .eq("id", trackId)
+        .single();
+
+      if (error) throw error;
+
+      this.importTrack(data.track_data);
+      alert(`Wczytano trasę: ${data.name}`);
+    } catch (err) {
+      console.error("Błąd wczytywania:", err);
+      alert("Błąd wczytywania: " + err.message);
+    }
+  }
+
+  async deleteTrack(trackId, trackName) {
+    if (!this.supabase) return;
+
+    if (!confirm(`Usunąć trasę "${trackName}"?`)) return;
+
+    try {
+      const { error } = await this.supabase
+        .from("tracks")
+        .delete()
+        .eq("id", trackId);
+
+      if (error) throw error;
+
+      await this.loadTrackList();
+    } catch (err) {
+      console.error("Błąd usuwania:", err);
+      alert("Błąd usuwania: " + err.message);
+    }
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  formatDate(dateStr) {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString("pl-PL", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+  }
+
+  // ==================== END SUPABASE ====================
 
   drawObstaclePreview() {
     if (!this.editMode || !this.mouseOnCanvas || this.editorMode !== "add")

@@ -272,9 +272,32 @@
             </button>
           </div>
         </div>
+
+        <div class="settings-panel" id="tracksPanel">
+          <h3>TRASY</h3>
+          <div class="track-save">
+            <input
+              type="text"
+              id="trackName"
+              placeholder="Nazwa trasy..."
+              maxlength="50"
+            />
+            <button id="saveTrackBtn" class="btn btn-small">💾 Zapisz</button>
+          </div>
+          <div class="track-list-header">
+            <span>Zapisane trasy:</span>
+            <button id="refreshTracksBtn" class="btn-icon-only" title="Odśwież">
+              ↻
+            </button>
+          </div>
+          <div class="track-list" id="trackList">
+            <div class="track-list-empty">Brak zapisanych tras</div>
+          </div>
+        </div>
       </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="physics.js"></script>
     <script src="game.js"></script>
   </body>

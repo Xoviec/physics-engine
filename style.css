@@ -704,3 +704,138 @@ body {
     min-width: 100%;
   }
 }
+
+/* Tracks Panel */
+.track-save {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.track-save input[type="text"] {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid #000;
+  border-radius: 4px;
+  font-size: 14px;
+  background: #fff;
+}
+
+.track-save input[type="text"]:focus {
+  outline: none;
+  border-color: #333;
+}
+
+.track-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+.btn-icon-only {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-icon-only:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.track-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.track-list-empty {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}
+
+.track-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.track-item:last-child {
+  border-bottom: none;
+}
+
+.track-item:hover {
+  background: #f0f0f0;
+}
+
+.track-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-item-name {
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.track-item-meta {
+  font-size: 11px;
+  color: #888;
+  margin-top: 2px;
+}
+
+.track-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.track-item-btn {
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.track-item-btn:hover {
+  background: #fff;
+  border-color: #999;
+}
+
+.track-item-btn.delete:hover {
+  background: #fee;
+  border-color: #f66;
+  color: #c00;
+}
+
+.track-loading {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+
+.track-error {
+  padding: 12px;
+  text-align: center;
+  color: #c00;
+  font-size: 13px;
+}
