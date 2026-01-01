@@ -282,12 +282,14 @@ body {
   margin-bottom: 8px;
 }
 
-.type-buttons {
+.type-buttons,
+.edit-mode-buttons {
   display: flex;
   gap: 8px;
 }
 
-.type-btn {
+.type-btn,
+.edit-mode-btn {
   flex: 1;
   padding: 8px 12px;
   border: 2px solid #ddd;
@@ -298,14 +300,54 @@ body {
   transition: all 0.2s;
 }
 
-.type-btn:hover {
+.type-btn:hover,
+.edit-mode-btn:hover {
   border-color: #999;
 }
 
-.type-btn.active {
+.type-btn.active,
+.edit-mode-btn.active {
   border-color: #000;
   background: #000;
   color: #fff;
+}
+
+.edit-mode-btn[data-mode="delete"].active {
+  background: #c00;
+  border-color: #c00;
+}
+
+.edit-mode-btn[data-mode="move"].active {
+  background: #06c;
+  border-color: #06c;
+}
+
+.edit-mode-selector {
+  margin-bottom: 12px;
+}
+
+.edit-mode-selector > label {
+  display: block;
+  font-size: 0.85rem;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+/* Cursor styles for edit modes */
+.canvas-wrapper.edit-mode-add canvas {
+  cursor: crosshair;
+}
+
+.canvas-wrapper.edit-mode-move canvas {
+  cursor: grab;
+}
+
+.canvas-wrapper.edit-mode-move canvas:active {
+  cursor: grabbing;
+}
+
+.canvas-wrapper.edit-mode-delete canvas {
+  cursor: not-allowed;
 }
 
 .checkbox-setting {

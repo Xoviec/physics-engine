@@ -103,20 +103,49 @@
               type="range"
               id="trackLength"
               min="600"
-              max="1500"
+              max="4000"
               step="100"
               value="800"
             />
             <span id="trackLengthValue">800</span>
           </div>
 
-          <div class="obstacle-type-selector">
-            <label>Typ przeszkody:</label>
-            <div class="type-buttons">
-              <button class="type-btn active" data-type="rectangle">
-                ▬ Belka
+          <div class="edit-mode-selector">
+            <label>Tryb edycji:</label>
+            <div class="edit-mode-buttons">
+              <button
+                class="edit-mode-btn active"
+                data-mode="add"
+                title="Dodaj element"
+              >
+                ✚ Dodaj
               </button>
-              <button class="type-btn" data-type="windmill">✱ Wiatrak</button>
+              <button
+                class="edit-mode-btn"
+                data-mode="move"
+                title="Przesuń element"
+              >
+                ✥ Przesuń
+              </button>
+              <button
+                class="edit-mode-btn"
+                data-mode="delete"
+                title="Usuń element"
+              >
+                ✕ Usuń
+              </button>
+            </div>
+          </div>
+
+          <div id="addModeSettings">
+            <div class="obstacle-type-selector">
+              <label>Typ przeszkody:</label>
+              <div class="type-buttons">
+                <button class="type-btn active" data-type="rectangle">
+                  ▬ Belka
+                </button>
+                <button class="type-btn" data-type="windmill">✱ Wiatrak</button>
+              </div>
             </div>
           </div>
 
