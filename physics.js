@@ -112,13 +112,77 @@ class Rectangle extends PhysicsBody {
   }
 }
 
+class Windmill extends PhysicsBody {
+  constructor(x, y, armLength = 60, armCount = 4) {
+    super(x, y, Infinity);
+    this.type = "windmill";
+    this.isStatic = true;
+    this.armLength = armLength;
+    this.armWidth = 10;
+    this.armCount = armCount;
+    this.angle = 0;
+    this.rotationSpeed = 0.03; // Radians per frame
+    this.direction = 1; // 1 = clockwise, -1 = counter-clockwise
+  }
+
+  update(dt) {
+    this.angle += this.rotationSpeed * this.direction;
+  }
+
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.position.x, this.position.y);
+    ctx.rotate(this.angle);
+
+    ctx.strokeStyle = "#000";
+    ctx.lineWidth = 2;
+
+    // Draw arms
+    for (let i = 0; i < this.armCount; i++) {
+      const armAngle = (i * Math.PI * 2) / this.armCount;
+      ctx.save();
+      ctx.rotate(armAngle);
+      ctx.strokeRect(
+        -this.armWidth / 2,
+        -this.armLength,
+        this.armWidth,
+        this.armLength
+      );
+      ctx.restore();
+    }
+
+    // Draw center circle
+    ctx.beginPath();
+    ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Get arm rectangles for collision detection
+  getArms() {
+    const arms = [];
+    for (let i = 0; i < this.armCount; i++) {
+      const armAngle = this.angle + (i * Math.PI * 2) / this.armCount;
+      arms.push({
+        cx: this.position.x,
+        cy: this.position.y,
+        width: this.armWidth,
+        height: this.armLength,
+        angle: armAngle,
+      });
+    }
+    return arms;
+  }
+}
+
 class PhysicsEngine {
   constructor() {
     this.bodies = [];
     this.gravity = new Vector2D(0, 0.5);
     this.bounds = { left: 0, right: 800, top: 0, bottom: 600 };
-    this.angleRandomness = 0.35; // Random angle deviation (radians, ~20 degrees max)
-    this.speedRandomness = 0.25; // Random speed variation (±25%)
+    this.angleRandomness = 0.35;
+    this.speedRandomness = 0.25;
   }
 
   addBody(body) {
@@ -142,11 +206,9 @@ class PhysicsEngine {
     this.bounds = { left, right, top, bottom };
   }
 
-  // Add random perturbation to velocity (both angle and magnitude)
   addRandomness(vx, vy, speed) {
-    if (speed < 0.5) return { vx, vy }; // Don't add randomness at low speeds
+    if (speed < 0.5) return { vx, vy };
 
-    // Random angle change
     const randomAngle = (Math.random() - 0.5) * this.angleRandomness;
     const cos = Math.cos(randomAngle);
     const sin = Math.sin(randomAngle);
@@ -154,7 +216,6 @@ class PhysicsEngine {
     let newVx = vx * cos - vy * sin;
     let newVy = vx * sin + vy * cos;
 
-    // Random speed multiplier (sometimes harder, sometimes softer bounce)
     const speedMultiplier = 1 + (Math.random() - 0.5) * this.speedRandomness;
     newVx *= speedMultiplier;
     newVy *= speedMultiplier;
@@ -185,6 +246,10 @@ class PhysicsEngine {
           this.resolveCircleRectangle(bodyA, bodyB);
         } else if (bodyA.type === "rectangle" && bodyB.type === "circle") {
           this.resolveCircleRectangle(bodyB, bodyA);
+        } else if (bodyA.type === "circle" && bodyB.type === "windmill") {
+          this.resolveCircleWindmill(bodyA, bodyB);
+        } else if (bodyA.type === "windmill" && bodyB.type === "circle") {
+          this.resolveCircleWindmill(bodyB, bodyA);
         }
       }
     }
@@ -234,7 +299,6 @@ class PhysicsEngine {
         circleA.velocity.x -= impulseX / circleA.mass;
         circleA.velocity.y -= impulseY / circleA.mass;
 
-        // Add randomness
         const speedA = Math.sqrt(
           circleA.velocity.x ** 2 + circleA.velocity.y ** 2
         );
@@ -250,7 +314,6 @@ class PhysicsEngine {
         circleB.velocity.x += impulseX / circleB.mass;
         circleB.velocity.y += impulseY / circleB.mass;
 
-        // Add randomness
         const speedB = Math.sqrt(
           circleB.velocity.x ** 2 + circleB.velocity.y ** 2
         );
@@ -314,14 +377,12 @@ class PhysicsEngine {
         circle.velocity.x -= (1 + restitution) * velAlongNormal * nx;
         circle.velocity.y -= (1 + restitution) * velAlongNormal * ny;
 
-        // Friction
         const tx = -ny;
         const ty = nx;
         const velAlongTangent = circle.velocity.x * tx + circle.velocity.y * ty;
         circle.velocity.x -= velAlongTangent * circle.friction * 2 * tx;
         circle.velocity.y -= velAlongTangent * circle.friction * 2 * ty;
 
-        // Add randomness after collision
         const speed = Math.sqrt(
           circle.velocity.x ** 2 + circle.velocity.y ** 2
         );
@@ -332,6 +393,94 @@ class PhysicsEngine {
         );
         circle.velocity.x = rand.vx;
         circle.velocity.y = rand.vy;
+      }
+    }
+  }
+
+  resolveCircleWindmill(circle, windmill) {
+    const arms = windmill.getArms();
+
+    for (const arm of arms) {
+      // Transform circle position to arm's local space
+      const cos = Math.cos(-arm.angle);
+      const sin = Math.sin(-arm.angle);
+
+      const localX =
+        cos * (circle.position.x - arm.cx) - sin * (circle.position.y - arm.cy);
+      const localY =
+        sin * (circle.position.x - arm.cx) + cos * (circle.position.y - arm.cy);
+
+      const hw = arm.width / 2;
+      const hh = arm.height;
+
+      // Arm extends from center (0,0) to (0, -armLength)
+      const clampedX = Math.max(-hw, Math.min(hw, localX));
+      const clampedY = Math.max(-hh, Math.min(0, localY));
+
+      const cosBack = Math.cos(arm.angle);
+      const sinBack = Math.sin(arm.angle);
+
+      const closestX = arm.cx + cosBack * clampedX - sinBack * clampedY;
+      const closestY = arm.cy + sinBack * clampedX + cosBack * clampedY;
+
+      const dx = circle.position.x - closestX;
+      const dy = circle.position.y - closestY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < circle.radius) {
+        let nx, ny;
+        if (distance === 0) {
+          nx = Math.cos(arm.angle + Math.PI / 2);
+          ny = Math.sin(arm.angle + Math.PI / 2);
+        } else {
+          nx = dx / distance;
+          ny = dy / distance;
+        }
+
+        const penetration = circle.radius - distance;
+        circle.position.x += nx * penetration * 1.1;
+        circle.position.y += ny * penetration * 1.1;
+
+        // Calculate arm velocity at contact point
+        const contactDist = Math.sqrt(
+          (closestX - arm.cx) ** 2 + (closestY - arm.cy) ** 2
+        );
+        const armSpeed =
+          contactDist * windmill.rotationSpeed * windmill.direction;
+
+        // Perpendicular direction (tangent to rotation)
+        const perpX = -Math.sin(arm.angle);
+        const perpY = Math.cos(arm.angle);
+
+        // Arm velocity at contact point
+        const armVelX = perpX * armSpeed;
+        const armVelY = perpY * armSpeed;
+
+        // Apply impulse from arm
+        const impulseFactor = 1.5;
+        circle.velocity.x += armVelX * impulseFactor;
+        circle.velocity.y += armVelY * impulseFactor;
+
+        // Standard collision response
+        const velAlongNormal = circle.velocity.x * nx + circle.velocity.y * ny;
+        if (velAlongNormal < 0) {
+          circle.velocity.x -= (1 + circle.restitution) * velAlongNormal * nx;
+          circle.velocity.y -= (1 + circle.restitution) * velAlongNormal * ny;
+        }
+
+        // Add randomness
+        const speed = Math.sqrt(
+          circle.velocity.x ** 2 + circle.velocity.y ** 2
+        );
+        const rand = this.addRandomness(
+          circle.velocity.x,
+          circle.velocity.y,
+          speed
+        );
+        circle.velocity.x = rand.vx;
+        circle.velocity.y = rand.vy;
+
+        break; // Only handle one arm collision per frame
       }
     }
   }
@@ -358,7 +507,6 @@ class PhysicsEngine {
         bounced = true;
       }
 
-      // Add randomness on wall bounce
       if (bounced) {
         const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
         const rand = this.addRandomness(

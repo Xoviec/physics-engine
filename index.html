@@ -109,30 +109,78 @@
             />
             <span id="trackLengthValue">800</span>
           </div>
-          <div class="setting">
-            <label for="obstacleAngle">Kąt przeszkody</label>
-            <input
-              type="range"
-              id="obstacleAngle"
-              min="-45"
-              max="45"
-              step="5"
-              value="0"
-            />
-            <span id="obstacleAngleValue">0°</span>
+
+          <div class="obstacle-type-selector">
+            <label>Typ przeszkody:</label>
+            <div class="type-buttons">
+              <button class="type-btn active" data-type="rectangle">
+                ▬ Belka
+              </button>
+              <button class="type-btn" data-type="windmill">✱ Wiatrak</button>
+            </div>
           </div>
-          <div class="setting">
-            <label for="obstacleWidth">Szerokość</label>
-            <input
-              type="range"
-              id="obstacleWidth"
-              min="40"
-              max="200"
-              step="10"
-              value="100"
-            />
-            <span id="obstacleWidthValue">100</span>
+
+          <div id="rectangleSettings">
+            <div class="setting">
+              <label for="obstacleAngle">Kąt</label>
+              <input
+                type="range"
+                id="obstacleAngle"
+                min="-45"
+                max="45"
+                step="5"
+                value="0"
+              />
+              <span id="obstacleAngleValue">0°</span>
+            </div>
+            <div class="setting">
+              <label for="obstacleWidth">Szerokość</label>
+              <input
+                type="range"
+                id="obstacleWidth"
+                min="40"
+                max="200"
+                step="10"
+                value="100"
+              />
+              <span id="obstacleWidthValue">100</span>
+            </div>
           </div>
+
+          <div id="windmillSettings" style="display: none">
+            <div class="setting">
+              <label for="windmillSize">Rozmiar</label>
+              <input
+                type="range"
+                id="windmillSize"
+                min="30"
+                max="80"
+                step="5"
+                value="50"
+              />
+              <span id="windmillSizeValue">50</span>
+            </div>
+            <div class="setting">
+              <label for="windmillSpeed">Prędkość</label>
+              <input
+                type="range"
+                id="windmillSpeed"
+                min="0.01"
+                max="0.08"
+                step="0.01"
+                value="0.03"
+              />
+              <span id="windmillSpeedValue">0.03</span>
+            </div>
+            <div class="setting">
+              <label for="windmillDir">Kierunek</label>
+              <select id="windmillDir">
+                <option value="1">Zgodnie z zegarem</option>
+                <option value="-1">Przeciwnie</option>
+              </select>
+            </div>
+          </div>
+
           <div class="setting checkbox-setting">
             <label class="checkbox-label">
               <input type="checkbox" id="mirrorMode" />

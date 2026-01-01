@@ -254,11 +254,58 @@ body {
   cursor: pointer;
 }
 
+.setting select {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: #fff;
+  cursor: pointer;
+}
+
 .setting span {
   flex: 0 0 40px;
   text-align: right;
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.obstacle-type-selector {
+  margin-bottom: 15px;
+}
+
+.obstacle-type-selector > label {
+  display: block;
+  font-size: 0.85rem;
+  color: #333;
+  margin-bottom: 8px;
+}
+
+.type-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.type-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.type-btn:hover {
+  border-color: #999;
+}
+
+.type-btn.active {
+  border-color: #000;
+  background: #000;
+  color: #fff;
 }
 
 .checkbox-setting {

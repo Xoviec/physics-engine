@@ -23,6 +23,7 @@ class Game {
     this.editMode = false;
     this.wins = { player1: 0, player2: 0 };
     this.obstacles = [];
+    this.windmills = [];
 
     this.finishLine = this.height - 40;
 
@@ -34,6 +35,9 @@ class Game {
     // Smooth scroll
     this.currentScrollY = 0;
     this.targetScrollY = 0;
+
+    // Current obstacle type
+    this.obstacleType = "rectangle";
 
     // UI elements
     this.startBtn = document.getElementById("startBtn");
@@ -48,6 +52,11 @@ class Game {
     this.editHint = document.getElementById("editHint");
     this.mirrorModeCheckbox = document.getElementById("mirrorMode");
 
+    // Obstacle type buttons
+    this.typeButtons = document.querySelectorAll(".type-btn");
+    this.rectangleSettings = document.getElementById("rectangleSettings");
+    this.windmillSettings = document.getElementById("windmillSettings");
+
     // Sliders
     this.gravitySlider = document.getElementById("gravity");
     this.bounceSlider = document.getElementById("bounce");
@@ -55,6 +64,9 @@ class Game {
     this.trackLengthSlider = document.getElementById("trackLength");
     this.obstacleAngleSlider = document.getElementById("obstacleAngle");
     this.obstacleWidthSlider = document.getElementById("obstacleWidth");
+    this.windmillSizeSlider = document.getElementById("windmillSize");
+    this.windmillSpeedSlider = document.getElementById("windmillSpeed");
+    this.windmillDirSelect = document.getElementById("windmillDir");
 
     // Value displays
     this.gravityValue = document.getElementById("gravityValue");
@@ -63,6 +75,8 @@ class Game {
     this.trackLengthValue = document.getElementById("trackLengthValue");
     this.obstacleAngleValue = document.getElementById("obstacleAngleValue");
     this.obstacleWidthValue = document.getElementById("obstacleWidthValue");
+    this.windmillSizeValue = document.getElementById("windmillSizeValue");
+    this.windmillSpeedValue = document.getElementById("windmillSpeedValue");
 
     this.lastTime = 0;
     this.accumulator = 0;
@@ -84,6 +98,21 @@ class Game {
     this.editBtn.addEventListener("click", () => this.toggleEditMode());
     this.clearTrackBtn.addEventListener("click", () => this.clearTrack());
     this.randomTrackBtn.addEventListener("click", () => this.generateTrack());
+
+    // Obstacle type selection
+    this.typeButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.typeButtons.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.obstacleType = btn.dataset.type;
+
+        // Show/hide settings
+        this.rectangleSettings.style.display =
+          this.obstacleType === "rectangle" ? "block" : "none";
+        this.windmillSettings.style.display =
+          this.obstacleType === "windmill" ? "block" : "none";
+      });
+    });
 
     // Canvas events for adding obstacles
     this.canvas.addEventListener("click", (e) => this.handleCanvasClick(e));
@@ -137,6 +166,17 @@ class Game {
       const value = parseInt(e.target.value);
       this.obstacleWidthValue.textContent = value;
     });
+
+    // Windmill sliders
+    this.windmillSizeSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.windmillSizeValue.textContent = value;
+    });
+
+    this.windmillSpeedSlider.addEventListener("input", (e) => {
+      const value = parseFloat(e.target.value);
+      this.windmillSpeedValue.textContent = value.toFixed(2);
+    });
   }
 
   handleMouseMove(e) {
@@ -183,25 +223,35 @@ class Game {
     // Don't add obstacles in start/finish zones
     if (y < 90 || y > this.finishLine - 20) return;
 
-    const angle = parseInt(this.obstacleAngleSlider.value);
-    const width = parseInt(this.obstacleWidthSlider.value);
-    const height = 12;
-    const angleRad = (angle * Math.PI) / 180;
+    if (this.obstacleType === "rectangle") {
+      const angle = parseInt(this.obstacleAngleSlider.value);
+      const width = parseInt(this.obstacleWidthSlider.value);
+      const height = 12;
+      const angleRad = (angle * Math.PI) / 180;
 
-    // Add main obstacle
-    this.addObstacle(x - width / 2, y - height / 2, width, height, angleRad);
+      this.addObstacle(x - width / 2, y - height / 2, width, height, angleRad);
 
-    // Add mirrored obstacle if mirror mode is enabled
-    if (this.mirrorModeCheckbox.checked) {
-      const mirrorX = this.width - x;
-      const mirrorAngle = -angleRad;
-      this.addObstacle(
-        mirrorX - width / 2,
-        y - height / 2,
-        width,
-        height,
-        mirrorAngle
-      );
+      if (this.mirrorModeCheckbox.checked) {
+        const mirrorX = this.width - x;
+        this.addObstacle(
+          mirrorX - width / 2,
+          y - height / 2,
+          width,
+          height,
+          -angleRad
+        );
+      }
+    } else if (this.obstacleType === "windmill") {
+      const size = parseInt(this.windmillSizeSlider.value);
+      const speed = parseFloat(this.windmillSpeedSlider.value);
+      const direction = parseInt(this.windmillDirSelect.value);
+
+      this.addWindmill(x, y, size, speed, direction);
+
+      if (this.mirrorModeCheckbox.checked) {
+        const mirrorX = this.width - x;
+        this.addWindmill(mirrorX, y, size, speed, -direction);
+      }
     }
   }
 
@@ -225,7 +275,11 @@ class Game {
     for (const obs of this.obstacles) {
       this.physics.removeBody(obs);
     }
+    for (const wm of this.windmills) {
+      this.physics.removeBody(wm);
+    }
     this.obstacles = [];
+    this.windmills = [];
     this.reset();
   }
 
@@ -238,7 +292,7 @@ class Game {
 
     for (let row = 0; row < numRows; row++) {
       const y = startY + row * rowHeight;
-      const config = Math.floor(Math.random() * 5);
+      const config = Math.floor(Math.random() * 6);
 
       switch (config) {
         case 0:
@@ -270,9 +324,15 @@ class Game {
           const offsetX = row % 2 === 0 ? 40 : this.width - 170;
           this.addObstacle(offsetX, y, 130, 10, row % 2 === 0 ? 0.25 : -0.25);
           break;
+        case 5:
+          // Add windmill
+          const wmX = 100 + Math.random() * (this.width - 200);
+          const wmDir = Math.random() > 0.5 ? 1 : -1;
+          this.addWindmill(wmX, y + 20, 50, 0.03, wmDir);
+          break;
       }
 
-      if (Math.random() > 0.65) {
+      if (Math.random() > 0.7) {
         const smallX = 60 + Math.random() * (this.width - 150);
         this.addObstacle(
           smallX,
@@ -294,12 +354,19 @@ class Game {
     this.physics.addBody(obstacle);
   }
 
+  addWindmill(x, y, armLength, speed, direction) {
+    const windmill = new Windmill(x, y, armLength, 4);
+    windmill.rotationSpeed = speed;
+    windmill.direction = direction;
+    this.windmills.push(windmill);
+    this.physics.addBody(windmill);
+  }
+
   startRace() {
     if (this.gameState !== "waiting" || this.editMode) return;
     this.gameState = "racing";
     this.startBtn.disabled = true;
     this.editBtn.disabled = true;
-    // Reset scroll
     this.currentScrollY = 0;
     this.targetScrollY = 0;
     this.canvasWrapper.scrollTop = 0;
@@ -312,7 +379,6 @@ class Game {
     this.editBtn.disabled = false;
     this.winnerOverlay.classList.remove("active");
     this.physics.setGravity(0, 0);
-    // Reset scroll
     this.currentScrollY = 0;
     this.targetScrollY = 0;
     this.canvasWrapper.scrollTop = 0;
@@ -325,17 +391,14 @@ class Game {
   autoScroll() {
     if (this.gameState !== "racing") return;
 
-    // Find the lowest ball
     const lowestY = Math.max(this.player1.position.y, this.player2.position.y);
 
     const wrapperHeight = this.canvasWrapper.clientHeight;
     const maxScroll = this.canvas.height - wrapperHeight;
 
-    // Target: keep lowest ball in the upper third of the view
     this.targetScrollY = lowestY - wrapperHeight * 0.35;
     this.targetScrollY = Math.max(0, Math.min(maxScroll, this.targetScrollY));
 
-    // Smooth interpolation with easing
     const diff = this.targetScrollY - this.currentScrollY;
     this.currentScrollY += diff * 0.05;
 
@@ -377,22 +440,31 @@ class Game {
     if (!this.editMode || !this.mouseOnCanvas) return;
 
     const y = this.mouseY;
-    // Only show preview in valid zone
     if (y < 90 || y > this.finishLine - 20) return;
 
-    const angle = parseInt(this.obstacleAngleSlider.value);
-    const width = parseInt(this.obstacleWidthSlider.value);
-    const height = 12;
     const x = this.mouseX;
-    const angleRad = (angle * Math.PI) / 180;
 
-    // Draw main preview
-    this.drawSinglePreview(x, y, width, height, angleRad);
+    if (this.obstacleType === "rectangle") {
+      const angle = parseInt(this.obstacleAngleSlider.value);
+      const width = parseInt(this.obstacleWidthSlider.value);
+      const height = 12;
+      const angleRad = (angle * Math.PI) / 180;
 
-    // Draw mirror preview if enabled
-    if (this.mirrorModeCheckbox.checked) {
-      const mirrorX = this.width - x;
-      this.drawSinglePreview(mirrorX, y, width, height, -angleRad);
+      this.drawSinglePreview(x, y, width, height, angleRad);
+
+      if (this.mirrorModeCheckbox.checked) {
+        const mirrorX = this.width - x;
+        this.drawSinglePreview(mirrorX, y, width, height, -angleRad);
+      }
+    } else if (this.obstacleType === "windmill") {
+      const size = parseInt(this.windmillSizeSlider.value);
+
+      this.drawWindmillPreview(x, y, size);
+
+      if (this.mirrorModeCheckbox.checked) {
+        const mirrorX = this.width - x;
+        this.drawWindmillPreview(mirrorX, y, size);
+      }
     }
   }
 
@@ -401,13 +473,11 @@ class Game {
     this.ctx.translate(x, y);
     this.ctx.rotate(angleRad);
 
-    // Draw preview with dashed outline
     this.ctx.strokeStyle = "#999";
     this.ctx.lineWidth = 2;
     this.ctx.setLineDash([4, 4]);
     this.ctx.strokeRect(-width / 2, -height / 2, width, height);
 
-    // Fill with semi-transparent
     this.ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
     this.ctx.fillRect(-width / 2, -height / 2, width, height);
 
@@ -415,8 +485,33 @@ class Game {
     this.ctx.setLineDash([]);
   }
 
+  drawWindmillPreview(x, y, size) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+
+    this.ctx.strokeStyle = "#999";
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([4, 4]);
+
+    // Draw arms preview
+    for (let i = 0; i < 4; i++) {
+      const armAngle = (i * Math.PI * 2) / 4;
+      this.ctx.save();
+      this.ctx.rotate(armAngle);
+      this.ctx.strokeRect(-5, -size, 10, size);
+      this.ctx.restore();
+    }
+
+    // Draw center
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, 8, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    this.ctx.restore();
+    this.ctx.setLineDash([]);
+  }
+
   draw() {
-    // White background
     this.ctx.fillStyle = "#fff";
     this.ctx.fillRect(0, 0, this.width, this.height);
 
