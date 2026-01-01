@@ -1,11 +1,12 @@
 /**
- * Wyścig Grawitacyjny - Minimalistyczna wersja
+ * Wyścig Grawitacyjny - z edytorem toru
  */
 
 class Game {
   constructor() {
     this.canvas = document.getElementById("gameCanvas");
     this.ctx = this.canvas.getContext("2d");
+    this.canvasWrapper = document.getElementById("canvasWrapper");
 
     this.width = 600;
     this.height = 800;
@@ -19,24 +20,49 @@ class Game {
     this.player2 = null;
 
     this.gameState = "waiting";
+    this.editMode = false;
     this.wins = { player1: 0, player2: 0 };
+    this.obstacles = [];
 
     this.finishLine = this.height - 40;
 
+    // Mouse position for preview
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mouseOnCanvas = false;
+
+    // Smooth scroll
+    this.currentScrollY = 0;
+    this.targetScrollY = 0;
+
+    // UI elements
     this.startBtn = document.getElementById("startBtn");
     this.resetBtn = document.getElementById("resetBtn");
-    this.newTrackBtn = document.getElementById("newTrackBtn");
+    this.editBtn = document.getElementById("editBtn");
+    this.clearTrackBtn = document.getElementById("clearTrackBtn");
+    this.randomTrackBtn = document.getElementById("randomTrackBtn");
     this.winnerOverlay = document.getElementById("winnerOverlay");
     this.winnerText = document.getElementById("winnerText");
     this.wins1El = document.getElementById("wins1");
     this.wins2El = document.getElementById("wins2");
+    this.editHint = document.getElementById("editHint");
+    this.mirrorModeCheckbox = document.getElementById("mirrorMode");
 
+    // Sliders
     this.gravitySlider = document.getElementById("gravity");
     this.bounceSlider = document.getElementById("bounce");
     this.frictionSlider = document.getElementById("friction");
+    this.trackLengthSlider = document.getElementById("trackLength");
+    this.obstacleAngleSlider = document.getElementById("obstacleAngle");
+    this.obstacleWidthSlider = document.getElementById("obstacleWidth");
+
+    // Value displays
     this.gravityValue = document.getElementById("gravityValue");
     this.bounceValue = document.getElementById("bounceValue");
     this.frictionValue = document.getElementById("frictionValue");
+    this.trackLengthValue = document.getElementById("trackLengthValue");
+    this.obstacleAngleValue = document.getElementById("obstacleAngleValue");
+    this.obstacleWidthValue = document.getElementById("obstacleWidthValue");
 
     this.lastTime = 0;
     this.accumulator = 0;
@@ -55,8 +81,23 @@ class Game {
   bindEvents() {
     this.startBtn.addEventListener("click", () => this.startRace());
     this.resetBtn.addEventListener("click", () => this.reset());
-    this.newTrackBtn.addEventListener("click", () => this.newTrack());
+    this.editBtn.addEventListener("click", () => this.toggleEditMode());
+    this.clearTrackBtn.addEventListener("click", () => this.clearTrack());
+    this.randomTrackBtn.addEventListener("click", () => this.generateTrack());
 
+    // Canvas events for adding obstacles
+    this.canvas.addEventListener("click", (e) => this.handleCanvasClick(e));
+    this.canvas.addEventListener("mousemove", (e) => this.handleMouseMove(e));
+    this.canvas.addEventListener(
+      "mouseenter",
+      () => (this.mouseOnCanvas = true)
+    );
+    this.canvas.addEventListener(
+      "mouseleave",
+      () => (this.mouseOnCanvas = false)
+    );
+
+    // Physics sliders
     this.gravitySlider.addEventListener("input", (e) => {
       const value = parseFloat(e.target.value);
       if (this.gameState === "racing") {
@@ -78,6 +119,90 @@ class Game {
       if (this.player2) this.player2.friction = value;
       this.frictionValue.textContent = value.toFixed(2);
     });
+
+    // Track length slider
+    this.trackLengthSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.trackLengthValue.textContent = value;
+      this.setTrackLength(value);
+    });
+
+    // Obstacle sliders
+    this.obstacleAngleSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.obstacleAngleValue.textContent = value + "°";
+    });
+
+    this.obstacleWidthSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.obstacleWidthValue.textContent = value;
+    });
+  }
+
+  handleMouseMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    this.mouseX = (e.clientX - rect.left) * scaleX;
+    this.mouseY =
+      (e.clientY - rect.top) * scaleY + this.canvasWrapper.scrollTop;
+  }
+
+  setTrackLength(length) {
+    this.height = length;
+    this.canvas.height = this.height;
+    this.physics.setBounds(0, this.width, 0, this.height);
+    this.finishLine = this.height - 40;
+    this.reset();
+  }
+
+  toggleEditMode() {
+    this.editMode = !this.editMode;
+    this.editBtn.classList.toggle("active", this.editMode);
+    this.editHint.classList.toggle("visible", this.editMode);
+
+    if (this.editMode) {
+      this.reset();
+      this.startBtn.disabled = true;
+    } else {
+      this.startBtn.disabled = false;
+    }
+  }
+
+  handleCanvasClick(e) {
+    if (!this.editMode || this.gameState === "racing") return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const scaleX = this.canvas.width / rect.width;
+    const scaleY = this.canvas.height / rect.height;
+
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY + this.canvasWrapper.scrollTop;
+
+    // Don't add obstacles in start/finish zones
+    if (y < 90 || y > this.finishLine - 20) return;
+
+    const angle = parseInt(this.obstacleAngleSlider.value);
+    const width = parseInt(this.obstacleWidthSlider.value);
+    const height = 12;
+    const angleRad = (angle * Math.PI) / 180;
+
+    // Add main obstacle
+    this.addObstacle(x - width / 2, y - height / 2, width, height, angleRad);
+
+    // Add mirrored obstacle if mirror mode is enabled
+    if (this.mirrorModeCheckbox.checked) {
+      const mirrorX = this.width - x;
+      const mirrorAngle = -angleRad;
+      this.addObstacle(
+        mirrorX - width / 2,
+        y - height / 2,
+        width,
+        height,
+        mirrorAngle
+      );
+    }
   }
 
   createPlayers() {
@@ -96,10 +221,18 @@ class Game {
     this.physics.addBody(this.player2);
   }
 
-  generateTrack() {
-    this.physics.clear();
+  clearTrack() {
+    for (const obs of this.obstacles) {
+      this.physics.removeBody(obs);
+    }
+    this.obstacles = [];
+    this.reset();
+  }
 
-    const numRows = 9;
+  generateTrack() {
+    this.clearTrack();
+
+    const numRows = Math.floor((this.height - 160) / 70);
     const rowHeight = (this.height - 160) / numRows;
     const startY = 100;
 
@@ -150,36 +283,63 @@ class Game {
         );
       }
     }
+
+    this.createPlayers();
   }
 
   addObstacle(x, y, width, height, angle = 0) {
     const obstacle = new Rectangle(x, y, width, height);
     obstacle.angle = angle;
+    this.obstacles.push(obstacle);
     this.physics.addBody(obstacle);
   }
 
   startRace() {
-    if (this.gameState !== "waiting") return;
+    if (this.gameState !== "waiting" || this.editMode) return;
     this.gameState = "racing";
     this.startBtn.disabled = true;
+    this.editBtn.disabled = true;
+    // Reset scroll
+    this.currentScrollY = 0;
+    this.targetScrollY = 0;
+    this.canvasWrapper.scrollTop = 0;
     this.physics.setGravity(0, parseFloat(this.gravitySlider.value));
   }
 
   reset() {
     this.gameState = "waiting";
-    this.startBtn.disabled = false;
+    this.startBtn.disabled = this.editMode;
+    this.editBtn.disabled = false;
     this.winnerOverlay.classList.remove("active");
     this.physics.setGravity(0, 0);
+    // Reset scroll
+    this.currentScrollY = 0;
+    this.targetScrollY = 0;
+    this.canvasWrapper.scrollTop = 0;
 
     this.physics.removeBody(this.player1);
     this.physics.removeBody(this.player2);
     this.createPlayers();
   }
 
-  newTrack() {
-    this.reset();
-    this.generateTrack();
-    this.createPlayers();
+  autoScroll() {
+    if (this.gameState !== "racing") return;
+
+    // Find the lowest ball
+    const lowestY = Math.max(this.player1.position.y, this.player2.position.y);
+
+    const wrapperHeight = this.canvasWrapper.clientHeight;
+    const maxScroll = this.canvas.height - wrapperHeight;
+
+    // Target: keep lowest ball in the upper third of the view
+    this.targetScrollY = lowestY - wrapperHeight * 0.35;
+    this.targetScrollY = Math.max(0, Math.min(maxScroll, this.targetScrollY));
+
+    // Smooth interpolation with easing
+    const diff = this.targetScrollY - this.currentScrollY;
+    this.currentScrollY += diff * 0.05;
+
+    this.canvasWrapper.scrollTop = this.currentScrollY;
   }
 
   checkWinner() {
@@ -209,15 +369,70 @@ class Game {
       this.winnerText.className = `winner-text player${winner}`;
       this.winnerOverlay.classList.add("active");
       this.startBtn.disabled = false;
+      this.editBtn.disabled = false;
     }
   }
 
+  drawObstaclePreview() {
+    if (!this.editMode || !this.mouseOnCanvas) return;
+
+    const y = this.mouseY;
+    // Only show preview in valid zone
+    if (y < 90 || y > this.finishLine - 20) return;
+
+    const angle = parseInt(this.obstacleAngleSlider.value);
+    const width = parseInt(this.obstacleWidthSlider.value);
+    const height = 12;
+    const x = this.mouseX;
+    const angleRad = (angle * Math.PI) / 180;
+
+    // Draw main preview
+    this.drawSinglePreview(x, y, width, height, angleRad);
+
+    // Draw mirror preview if enabled
+    if (this.mirrorModeCheckbox.checked) {
+      const mirrorX = this.width - x;
+      this.drawSinglePreview(mirrorX, y, width, height, -angleRad);
+    }
+  }
+
+  drawSinglePreview(x, y, width, height, angleRad) {
+    this.ctx.save();
+    this.ctx.translate(x, y);
+    this.ctx.rotate(angleRad);
+
+    // Draw preview with dashed outline
+    this.ctx.strokeStyle = "#999";
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([4, 4]);
+    this.ctx.strokeRect(-width / 2, -height / 2, width, height);
+
+    // Fill with semi-transparent
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.1)";
+    this.ctx.fillRect(-width / 2, -height / 2, width, height);
+
+    this.ctx.restore();
+    this.ctx.setLineDash([]);
+  }
+
   draw() {
-    // Białe tło
+    // White background
     this.ctx.fillStyle = "#fff";
     this.ctx.fillRect(0, 0, this.width, this.height);
 
-    // Linia startu
+    // Center line (for mirror reference)
+    if (this.editMode && this.mirrorModeCheckbox.checked) {
+      this.ctx.strokeStyle = "#ddd";
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([8, 4]);
+      this.ctx.beginPath();
+      this.ctx.moveTo(this.width / 2, 0);
+      this.ctx.lineTo(this.width / 2, this.height);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+    }
+
+    // Start line
     this.ctx.strokeStyle = "#ccc";
     this.ctx.lineWidth = 1;
     this.ctx.setLineDash([5, 5]);
@@ -227,7 +442,7 @@ class Game {
     this.ctx.stroke();
     this.ctx.setLineDash([]);
 
-    // Linia mety - szachownica
+    // Finish line - checkerboard
     const y = this.finishLine;
     const squareSize = 15;
     for (let x = 0; x < this.width; x += squareSize) {
@@ -241,10 +456,29 @@ class Game {
       this.ctx.fillRect(x, y + squareSize, squareSize, squareSize);
     }
 
-    // Rysuj przeszkody i graczy
+    // Edit mode zone indicators
+    if (this.editMode) {
+      this.ctx.strokeStyle = "#999";
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([3, 3]);
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, 90);
+      this.ctx.lineTo(this.width, 90);
+      this.ctx.stroke();
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, this.finishLine - 20);
+      this.ctx.lineTo(this.width, this.finishLine - 20);
+      this.ctx.stroke();
+
+      this.ctx.setLineDash([]);
+    }
+
+    // Draw obstacles and players
     this.physics.draw(this.ctx);
 
-    // Etykiety graczy
+    // Player labels
     this.ctx.fillStyle = "#000";
     this.ctx.font = "bold 11px sans-serif";
     this.ctx.textAlign = "center";
@@ -258,6 +492,9 @@ class Game {
       this.player2.position.x,
       this.player2.position.y + 4
     );
+
+    // Draw obstacle preview in edit mode
+    this.drawObstaclePreview();
   }
 
   gameLoop(timestamp) {
@@ -267,7 +504,6 @@ class Game {
 
     this.accumulator += deltaTime;
 
-    // Fixed timestep dla stabilnej fizyki
     while (this.accumulator >= this.fixedDt) {
       if (this.gameState === "racing") {
         this.physics.update(1);
@@ -276,6 +512,7 @@ class Game {
     }
 
     this.draw();
+    this.autoScroll();
     this.checkWinner();
 
     requestAnimationFrame((t) => this.gameLoop(t));

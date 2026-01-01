@@ -12,7 +12,7 @@ body {
 }
 
 .container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 20px;
   display: flex;
@@ -88,14 +88,32 @@ body {
   position: relative;
   border: 2px solid #000;
   background: #fff;
+  overflow: auto;
+  max-height: 600px;
+  scroll-behavior: auto;
 }
 
 #gameCanvas {
   display: block;
 }
 
-.countdown {
-  display: none;
+.edit-hint {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.edit-hint.visible {
+  opacity: 1;
 }
 
 .winner-overlay {
@@ -127,6 +145,8 @@ body {
 .controls {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .btn {
@@ -163,13 +183,32 @@ body {
   font-size: 1rem;
 }
 
+.btn-edit.active {
+  background: #000;
+  color: #fff;
+}
+
+.btn-small {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+}
+
+.panels {
+  display: flex;
+  gap: 15px;
+  width: 100%;
+  max-width: 700px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .settings-panel {
   background: #fff;
   padding: 20px 25px;
   border-radius: 8px;
   border: 1px solid #ddd;
-  width: 100%;
-  max-width: 400px;
+  flex: 1;
+  min-width: 280px;
 }
 
 .settings-panel h3 {
@@ -192,7 +231,7 @@ body {
 }
 
 .setting label {
-  flex: 0 0 90px;
+  flex: 0 0 100px;
   font-size: 0.85rem;
   color: #333;
 }
@@ -222,8 +261,52 @@ body {
   font-weight: 600;
 }
 
-.game-footer {
+.checkbox-setting {
+  justify-content: center;
+  margin-top: 5px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #333;
+  flex: none;
+}
+
+.checkbox-label input[type="checkbox"] {
   display: none;
+}
+
+.checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #000;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark {
+  background: #000;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark::after {
+  content: "✓";
+  color: #fff;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.editor-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  justify-content: center;
 }
 
 @media (max-width: 640px) {
@@ -240,13 +323,16 @@ body {
     display: none;
   }
 
-  .controls {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-
   .btn {
     padding: 8px 16px;
     font-size: 0.8rem;
+  }
+
+  .panels {
+    flex-direction: column;
+  }
+
+  .settings-panel {
+    min-width: 100%;
   }
 }

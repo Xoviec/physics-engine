@@ -117,6 +117,7 @@ class PhysicsEngine {
     this.bodies = [];
     this.gravity = new Vector2D(0, 0.5);
     this.bounds = { left: 0, right: 800, top: 0, bottom: 600 };
+    this.randomness = 0.15; // Amount of randomness in collisions (0-1)
   }
 
   addBody(body) {
@@ -138,6 +139,20 @@ class PhysicsEngine {
 
   setBounds(left, right, top, bottom) {
     this.bounds = { left, right, top, bottom };
+  }
+
+  // Add small random perturbation to velocity
+  addRandomness(vx, vy, speed) {
+    if (speed < 0.5) return { vx, vy }; // Don't add randomness at low speeds
+
+    const randomAngle = (Math.random() - 0.5) * this.randomness;
+    const cos = Math.cos(randomAngle);
+    const sin = Math.sin(randomAngle);
+
+    return {
+      vx: vx * cos - vy * sin,
+      vy: vx * sin + vy * cos,
+    };
   }
 
   update(dt) {
@@ -211,10 +226,34 @@ class PhysicsEngine {
       if (!circleA.isStatic) {
         circleA.velocity.x -= impulseX / circleA.mass;
         circleA.velocity.y -= impulseY / circleA.mass;
+
+        // Add randomness
+        const speedA = Math.sqrt(
+          circleA.velocity.x ** 2 + circleA.velocity.y ** 2
+        );
+        const randA = this.addRandomness(
+          circleA.velocity.x,
+          circleA.velocity.y,
+          speedA
+        );
+        circleA.velocity.x = randA.vx;
+        circleA.velocity.y = randA.vy;
       }
       if (!circleB.isStatic) {
         circleB.velocity.x += impulseX / circleB.mass;
         circleB.velocity.y += impulseY / circleB.mass;
+
+        // Add randomness
+        const speedB = Math.sqrt(
+          circleB.velocity.x ** 2 + circleB.velocity.y ** 2
+        );
+        const randB = this.addRandomness(
+          circleB.velocity.x,
+          circleB.velocity.y,
+          speedB
+        );
+        circleB.velocity.x = randB.vx;
+        circleB.velocity.y = randB.vy;
       }
     }
   }
@@ -268,12 +307,24 @@ class PhysicsEngine {
         circle.velocity.x -= (1 + restitution) * velAlongNormal * nx;
         circle.velocity.y -= (1 + restitution) * velAlongNormal * ny;
 
-        // Tarcie
+        // Friction
         const tx = -ny;
         const ty = nx;
         const velAlongTangent = circle.velocity.x * tx + circle.velocity.y * ty;
         circle.velocity.x -= velAlongTangent * circle.friction * 2 * tx;
         circle.velocity.y -= velAlongTangent * circle.friction * 2 * ty;
+
+        // Add randomness after collision
+        const speed = Math.sqrt(
+          circle.velocity.x ** 2 + circle.velocity.y ** 2
+        );
+        const rand = this.addRandomness(
+          circle.velocity.x,
+          circle.velocity.y,
+          speed
+        );
+        circle.velocity.x = rand.vx;
+        circle.velocity.y = rand.vy;
       }
     }
   }
@@ -282,17 +333,34 @@ class PhysicsEngine {
     for (const body of this.bodies) {
       if (body.isStatic || body.type !== "circle") continue;
 
+      let bounced = false;
+
       if (body.position.x - body.radius < this.bounds.left) {
         body.position.x = this.bounds.left + body.radius;
         body.velocity.x *= -body.restitution;
+        bounced = true;
       }
       if (body.position.x + body.radius > this.bounds.right) {
         body.position.x = this.bounds.right - body.radius;
         body.velocity.x *= -body.restitution;
+        bounced = true;
       }
       if (body.position.y - body.radius < this.bounds.top) {
         body.position.y = this.bounds.top + body.radius;
         body.velocity.y *= -body.restitution;
+        bounced = true;
+      }
+
+      // Add randomness on wall bounce
+      if (bounced) {
+        const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+        const rand = this.addRandomness(
+          body.velocity.x,
+          body.velocity.y,
+          speed
+        );
+        body.velocity.x = rand.vx;
+        body.velocity.y = rand.vy;
       }
     }
   }

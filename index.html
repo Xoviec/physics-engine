@@ -28,9 +28,11 @@
           </div>
         </div>
 
-        <div class="canvas-wrapper">
+        <div class="canvas-wrapper" id="canvasWrapper">
           <canvas id="gameCanvas"></canvas>
-          <div class="countdown" id="countdown"></div>
+          <div class="edit-hint" id="editHint">
+            Kliknij aby dodać przeszkodę
+          </div>
           <div class="winner-overlay" id="winnerOverlay">
             <div class="winner-text" id="winnerText"></div>
           </div>
@@ -45,50 +47,107 @@
             <span class="btn-icon">↺</span>
             RESET
           </button>
-          <button id="newTrackBtn" class="btn btn-track">
-            <span class="btn-icon">⚡</span>
-            NOWY TOR
+          <button id="editBtn" class="btn btn-edit">
+            <span class="btn-icon">✎</span>
+            EDYTUJ TOR
           </button>
         </div>
       </div>
 
-      <div class="settings-panel">
-        <h3>PARAMETRY FIZYKI</h3>
-        <div class="setting">
-          <label for="gravity">Grawitacja</label>
-          <input
-            type="range"
-            id="gravity"
-            min="0.1"
-            max="2"
-            step="0.1"
-            value="0.5"
-          />
-          <span id="gravityValue">0.5</span>
+      <div class="panels">
+        <div class="settings-panel">
+          <h3>PARAMETRY FIZYKI</h3>
+          <div class="setting">
+            <label for="gravity">Grawitacja</label>
+            <input
+              type="range"
+              id="gravity"
+              min="0.1"
+              max="2"
+              step="0.1"
+              value="0.5"
+            />
+            <span id="gravityValue">0.5</span>
+          </div>
+          <div class="setting">
+            <label for="bounce">Sprężystość</label>
+            <input
+              type="range"
+              id="bounce"
+              min="0"
+              max="1"
+              step="0.1"
+              value="0.7"
+            />
+            <span id="bounceValue">0.7</span>
+          </div>
+          <div class="setting">
+            <label for="friction">Tarcie</label>
+            <input
+              type="range"
+              id="friction"
+              min="0"
+              max="0.2"
+              step="0.01"
+              value="0.02"
+            />
+            <span id="frictionValue">0.02</span>
+          </div>
         </div>
-        <div class="setting">
-          <label for="bounce">Sprężystość</label>
-          <input
-            type="range"
-            id="bounce"
-            min="0"
-            max="1"
-            step="0.1"
-            value="0.7"
-          />
-          <span id="bounceValue">0.7</span>
-        </div>
-        <div class="setting">
-          <label for="friction">Tarcie</label>
-          <input
-            type="range"
-            id="friction"
-            min="0"
-            max="0.2"
-            step="0.01"
-            value="0.02"
-          />
-          <span id="frictionValue">0.02</span>
+
+        <div class="settings-panel" id="editorPanel">
+          <h3>EDYTOR TORU</h3>
+          <div class="setting">
+            <label for="trackLength">Długość toru</label>
+            <input
+              type="range"
+              id="trackLength"
+              min="600"
+              max="1500"
+              step="100"
+              value="800"
+            />
+            <span id="trackLengthValue">800</span>
+          </div>
+          <div class="setting">
+            <label for="obstacleAngle">Kąt przeszkody</label>
+            <input
+              type="range"
+              id="obstacleAngle"
+              min="-45"
+              max="45"
+              step="5"
+              value="0"
+            />
+            <span id="obstacleAngleValue">0°</span>
+          </div>
+          <div class="setting">
+            <label for="obstacleWidth">Szerokość</label>
+            <input
+              type="range"
+              id="obstacleWidth"
+              min="40"
+              max="200"
+              step="10"
+              value="100"
+            />
+            <span id="obstacleWidthValue">100</span>
+          </div>
+          <div class="setting checkbox-setting">
+            <label class="checkbox-label">
+              <input type="checkbox" id="mirrorMode" />
+              <span class="checkmark"></span>
+              Odbicie lustrzane
+            </label>
+          </div>
+          <div class="editor-buttons">
+            <button id="clearTrackBtn" class="btn btn-small">
+              Wyczyść tor
+            </button>
+            <button id="randomTrackBtn" class="btn btn-small">
+              Losowy tor
+            </button>
+          </div>
         </div>
       </div>
     </div>
