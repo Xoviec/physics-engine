@@ -92,6 +92,8 @@ class Game {
     this.avatarOverlay = document.getElementById("avatarOverlay");
     this.avatarDivs = []; // HTML divs for high-quality avatar rendering
     this.avatarDataUrls = []; // Store original data URLs for high-quality rendering
+    this.playerSounds = []; // Audio objects for each player
+    this.currentLeader = -1; // Index of current leader (for sound switching)
 
     // Obstacle type buttons
     this.typeButtons = document.querySelectorAll(".type-btn");
@@ -588,24 +590,46 @@ class Game {
         preview.innerHTML = `<img src="${this.avatarDataUrls[i]}" alt="Avatar ${playerNum}">`;
       }
 
-      const input = document.createElement("input");
-      input.type = "file";
-      input.accept = "image/*";
-      input.addEventListener("change", (e) => {
+      // Avatar image input
+      const imgInput = document.createElement("input");
+      imgInput.type = "file";
+      imgInput.accept = "image/*";
+      imgInput.title = "Avatar";
+      imgInput.addEventListener("change", (e) => {
         this.loadAvatar(e.target.files[0], playerNum);
       });
+
+      // Sound input
+      const soundInput = document.createElement("input");
+      soundInput.type = "file";
+      soundInput.accept = "audio/*";
+      soundInput.title = "Dźwięk";
+      soundInput.className = "sound-input";
+      soundInput.addEventListener("change", (e) => {
+        this.loadSound(e.target.files[0], playerNum);
+      });
+
+      // Sound indicator
+      const soundIndicator = document.createElement("span");
+      soundIndicator.className = "sound-indicator";
+      soundIndicator.id = `soundIndicator${playerNum}`;
+      soundIndicator.textContent = this.playerSounds[i] ? "🔊" : "";
 
       const clearBtn = document.createElement("button");
       clearBtn.className = "btn-small";
       clearBtn.textContent = "✕";
       clearBtn.addEventListener("click", () => {
         this.clearAvatar(playerNum);
-        input.value = "";
+        this.clearSound(playerNum);
+        imgInput.value = "";
+        soundInput.value = "";
       });
 
       item.appendChild(label);
       item.appendChild(preview);
-      item.appendChild(input);
+      item.appendChild(imgInput);
+      item.appendChild(soundInput);
+      item.appendChild(soundIndicator);
       item.appendChild(clearBtn);
 
       this.avatarUploadContainer.appendChild(item);
@@ -713,6 +737,103 @@ class Game {
     if (preview) {
       preview.innerHTML = "";
     }
+  }
+
+  loadSound(file, playerNum) {
+    if (!file) return;
+
+    const idx = playerNum - 1;
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      // Stop and remove old sound if exists
+      if (this.playerSounds[idx]) {
+        this.playerSounds[idx].pause();
+        this.playerSounds[idx] = null;
+      }
+
+      // Create new Audio object
+      const audio = new Audio(e.target.result);
+      audio.loop = true;
+      this.playerSounds[idx] = audio;
+
+      // Update indicator
+      const indicator = document.getElementById(`soundIndicator${playerNum}`);
+      if (indicator) {
+        indicator.textContent = "🔊";
+      }
+    };
+
+    reader.readAsDataURL(file);
+  }
+
+  clearSound(playerNum) {
+    const idx = playerNum - 1;
+
+    // Stop and remove sound
+    if (this.playerSounds[idx]) {
+      this.playerSounds[idx].pause();
+      this.playerSounds[idx] = null;
+    }
+
+    // Update indicator
+    const indicator = document.getElementById(`soundIndicator${playerNum}`);
+    if (indicator) {
+      indicator.textContent = "";
+    }
+
+    // Reset leader if this was the leader
+    if (this.currentLeader === idx) {
+      this.currentLeader = -1;
+    }
+  }
+
+  updateLeaderSound() {
+    if (this.gameState !== "racing" || this.players.length === 0) {
+      // Stop all sounds when not racing
+      if (this.currentLeader !== -1 && this.playerSounds[this.currentLeader]) {
+        this.playerSounds[this.currentLeader].pause();
+      }
+      this.currentLeader = -1;
+      return;
+    }
+
+    // Find the leader (player closest to finish line = highest Y position)
+    let leaderIdx = 0;
+    let maxY = this.players[0].position.y;
+
+    for (let i = 1; i < this.players.length; i++) {
+      if (this.players[i].position.y > maxY) {
+        maxY = this.players[i].position.y;
+        leaderIdx = i;
+      }
+    }
+
+    // If leader changed, switch sounds
+    if (leaderIdx !== this.currentLeader) {
+      // Stop previous leader's sound
+      if (this.currentLeader !== -1 && this.playerSounds[this.currentLeader]) {
+        this.playerSounds[this.currentLeader].pause();
+      }
+
+      // Play new leader's sound
+      if (this.playerSounds[leaderIdx]) {
+        this.playerSounds[leaderIdx].currentTime = 0;
+        this.playerSounds[leaderIdx].play().catch(() => {});
+      }
+
+      this.currentLeader = leaderIdx;
+    }
+  }
+
+  stopAllSounds() {
+    for (const sound of this.playerSounds) {
+      if (sound) {
+        sound.pause();
+        sound.currentTime = 0;
+      }
+    }
+    this.currentLeader = -1;
   }
 
   removePlayers() {
@@ -1221,6 +1342,7 @@ class Game {
     this.winnerOverlay.classList.remove("active");
     this.spinnerSpeed = 0.08;
     this.countdownTime = 0;
+    this.stopAllSounds();
     this.resetPlayers();
   }
 
@@ -1259,6 +1381,7 @@ class Game {
     if (finishedPlayers.length > 0) {
       this.gameState = "finished";
       this.physics.setGravity(0, 0);
+      this.stopAllSounds();
 
       // Winner is the one lowest (furthest ahead)
       let winner = finishedPlayers.reduce((a, b) =>
@@ -1589,6 +1712,7 @@ class Game {
     this.draw();
     this.updateAvatarDivPositions();
     this.autoScroll();
+    this.updateLeaderSound();
     this.checkWinner();
 
     requestAnimationFrame((t) => this.gameLoop(t));

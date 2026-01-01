@@ -438,9 +438,17 @@ body {
 }
 
 .avatar-item input[type="file"] {
-  flex: 1;
-  font-size: 0.7rem;
-  max-width: 100px;
+  font-size: 0.65rem;
+  max-width: 70px;
+}
+
+.avatar-item .sound-input {
+  max-width: 60px;
+}
+
+.sound-indicator {
+  font-size: 0.8rem;
+  min-width: 18px;
 }
 
 .btn-small {
