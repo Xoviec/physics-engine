@@ -61,7 +61,7 @@ class Game {
     // Start spinner
     this.spinnerAngle = 0;
     this.spinnerSpeed = 0.05;
-    this.spinnerRadius = 70;
+    this.spinnerRadius = 100;
     this.countdownTime = 0;
     this.countdownDuration = 3000; // 3 seconds
 
@@ -1250,12 +1250,15 @@ class Game {
     this.physics.setGravity(0, parseFloat(this.gravitySlider.value));
 
     // Check if spinner start is enabled
-    if (this.spinnerStartCheckbox.checked) {
+    const useSpinner =
+      this.spinnerStartCheckbox && this.spinnerStartCheckbox.checked;
+
+    if (useSpinner) {
       // Start countdown with spinner
       this.gameState = "countdown";
       this.countdownTime = 0;
       this.spinnerAngle = 0;
-      this.spinnerSpeed = 0.03;
+      this.spinnerSpeed = 0.015;
 
       // Position players inside spinner
       const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
@@ -1263,17 +1266,24 @@ class Game {
 
       // Arrange players in a circle inside spinner
       const numPlayers = this.players.length;
+      const arrangeRadius = Math.min(40, this.spinnerRadius * 0.4);
+
       for (let i = 0; i < numPlayers; i++) {
         const angle = (i / numPlayers) * Math.PI * 2 - Math.PI / 2;
-        const dist = Math.min(30, this.spinnerRadius * 0.5);
-        this.players[i].position.x = centerX + Math.cos(angle) * dist;
-        this.players[i].position.y = centerY + Math.sin(angle) * dist;
+        this.players[i].position.x = centerX + Math.cos(angle) * arrangeRadius;
+        this.players[i].position.y = centerY + Math.sin(angle) * arrangeRadius;
         this.players[i].velocity.x = 0;
         this.players[i].velocity.y = 0;
       }
     } else {
-      // Start immediately without spinner
+      // Start immediately without spinner - just go to racing
       this.gameState = "racing";
+
+      // Reset velocities to ensure clean start
+      for (const player of this.players) {
+        player.velocity.x = 0;
+        player.velocity.y = 0;
+      }
     }
   }
 
@@ -1282,45 +1292,115 @@ class Game {
 
     this.countdownTime += dt;
 
-    // Speed up spinner over time
+    // Speed up spinner over time (but keep it reasonable)
     this.spinnerSpeed =
-      0.02 + (this.countdownTime / this.countdownDuration) * 0.05;
+      0.015 + (this.countdownTime / this.countdownDuration) * 0.03;
     this.spinnerAngle += this.spinnerSpeed;
 
     const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
     const centerY = 90;
     const radius = this.spinnerRadius;
+    const gravity = parseFloat(this.gravitySlider.value);
 
-    // Constrain balls to spinner circle (physics engine handles the rest)
-    if (this.players.length > 0) {
-      for (const ball of this.players) {
-        const dx = ball.position.x - centerX;
-        const dy = ball.position.y - centerY;
+    // Simple physics for balls inside spinner (separate from main physics)
+    // Moderate friction for tumbling
+    const spinnerFriction = 0.03;
+
+    for (const ball of this.players) {
+      // Apply gravity
+      ball.velocity.y += gravity;
+
+      // Apply friction
+      ball.velocity.x *= 1 - spinnerFriction;
+      ball.velocity.y *= 1 - spinnerFriction;
+
+      // Constrain to spinner circle
+      const dx = ball.position.x - centerX;
+      const dy = ball.position.y - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = radius - ball.radius - 1;
+
+      // Calculate tangent direction (rotation direction)
+      const tangentX = -dy / (dist || 1);
+      const tangentY = dx / (dist || 1);
+
+      // Apply continuous rotational drag from spinning drum
+      // Balls closer to the wall get more drag
+      const dragStrength = (dist / radius) * this.spinnerSpeed * 8;
+      ball.velocity.x += tangentX * dragStrength;
+      ball.velocity.y += tangentY * dragStrength;
+
+      if (dist > maxDist && dist > 0) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        // Push back inside
+        ball.position.x = centerX + nx * maxDist;
+        ball.position.y = centerY + ny * maxDist;
+
+        // Reflect velocity off circular wall
+        const dot = ball.velocity.x * nx + ball.velocity.y * ny;
+        if (dot > 0) {
+          ball.velocity.x -= (1 + ball.restitution * 0.4) * dot * nx;
+          ball.velocity.y -= (1 + ball.restitution * 0.4) * dot * ny;
+        }
+
+        // Strong push from wall contact
+        const wallPush = this.spinnerSpeed * 12;
+        ball.velocity.x += tangentX * wallPush;
+        ball.velocity.y += tangentY * wallPush;
+      }
+
+      // Update position
+      ball.position.x += ball.velocity.x;
+      ball.position.y += ball.velocity.y;
+    }
+
+    // Ball-to-ball collisions inside spinner
+    for (let i = 0; i < this.players.length; i++) {
+      for (let j = i + 1; j < this.players.length; j++) {
+        const a = this.players[i];
+        const b = this.players[j];
+
+        const dx = b.position.x - a.position.x;
+        const dy = b.position.y - a.position.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = radius - ball.radius - 2;
+        const minDist = a.radius + b.radius;
 
-        // Keep ball inside spinner circle
-        if (dist > maxDist && dist > 0) {
+        if (dist < minDist && dist > 0) {
           const nx = dx / dist;
           const ny = dy / dist;
+          const overlap = (minDist - dist) / 2;
 
-          // Push back inside
-          ball.position.x = centerX + nx * maxDist;
-          ball.position.y = centerY + ny * maxDist;
+          // Separate balls
+          a.position.x -= nx * overlap;
+          a.position.y -= ny * overlap;
+          b.position.x += nx * overlap;
+          b.position.y += ny * overlap;
 
-          // Reflect velocity off circular wall
-          const dot = ball.velocity.x * nx + ball.velocity.y * ny;
-          if (dot > 0) {
-            ball.velocity.x -= 2 * dot * nx * ball.restitution;
-            ball.velocity.y -= 2 * dot * ny * ball.restitution;
+          // Exchange velocities along collision normal (tennis ball bounce)
+          const relVel =
+            (a.velocity.x - b.velocity.x) * nx +
+            (a.velocity.y - b.velocity.y) * ny;
+          if (relVel > 0) {
+            const restitution = 0.75; // Tennis ball-like bounce
+            a.velocity.x -= relVel * nx * restitution;
+            a.velocity.y -= relVel * ny * restitution;
+            b.velocity.x += relVel * nx * restitution;
+            b.velocity.y += relVel * ny * restitution;
           }
-
-          // Add spin from rotating wall
-          const tangentX = -ny;
-          const tangentY = nx;
-          ball.velocity.x += tangentX * this.spinnerSpeed * 6;
-          ball.velocity.y += tangentY * this.spinnerSpeed * 6;
         }
+      }
+    }
+
+    // Clamp all ball velocities to prevent extreme speeds
+    const maxSpeed = 30;
+    for (const ball of this.players) {
+      const speed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2);
+      if (speed > maxSpeed) {
+        const scale = maxSpeed / speed;
+        ball.velocity.x *= scale;
+        ball.velocity.y *= scale;
       }
     }
 
@@ -1697,13 +1777,18 @@ class Game {
 
     this.accumulator += deltaTime;
 
-    // Update countdown spinner
+    // Update countdown spinner (has its own physics)
     if (this.gameState === "countdown") {
       this.updateCountdown(deltaTime);
+      // Update windmills during countdown for visual effect
+      for (const wm of this.windmills) {
+        wm.update(1);
+      }
     }
 
     while (this.accumulator >= this.fixedDt) {
-      if (this.gameState === "racing" || this.gameState === "countdown") {
+      // Only run full physics during racing (not during countdown)
+      if (this.gameState === "racing") {
         this.physics.update(1);
       }
       this.accumulator -= this.fixedDt;

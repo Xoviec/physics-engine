@@ -281,11 +281,27 @@ class PhysicsEngine {
     let newVx = vx * cos - vy * sin;
     let newVy = vx * sin + vy * cos;
 
-    const speedMultiplier = 1 + (Math.random() - 0.5) * this.speedRandomness;
+    // Speed multiplier capped to prevent extreme acceleration
+    const speedMultiplier =
+      1 + (Math.random() - 0.5) * this.speedRandomness * 0.5;
     newVx *= speedMultiplier;
     newVy *= speedMultiplier;
 
     return { vx: newVx, vy: newVy };
+  }
+
+  // Clamp velocity to prevent tunneling
+  clampVelocity(body) {
+    if (body.type !== "circle" || body.isStatic) return;
+
+    // Max speed allows good rolling on inclines while preventing tunneling
+    const maxSpeed = Math.min(body.radius * 2, 35);
+    const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+    if (speed > maxSpeed) {
+      const scale = maxSpeed / speed;
+      body.velocity.x *= scale;
+      body.velocity.y *= scale;
+    }
   }
 
   update(dt) {
@@ -294,27 +310,40 @@ class PhysicsEngine {
         body.applyForce(this.gravity.multiply(body.mass));
       }
       body.update(dt);
+
+      // Limit velocity before collision detection
+      this.clampVelocity(body);
     }
+    // Multiple collision iterations to ensure no penetration
     this.checkCollisions();
     this.checkBounds();
+
+    // Final velocity clamp after all collisions resolved
+    for (const body of this.bodies) {
+      this.clampVelocity(body);
+    }
   }
 
   checkCollisions() {
-    for (let i = 0; i < this.bodies.length; i++) {
-      for (let j = i + 1; j < this.bodies.length; j++) {
-        const bodyA = this.bodies[i];
-        const bodyB = this.bodies[j];
+    // Run multiple iterations to resolve all penetrations
+    const iterations = 3;
+    for (let iter = 0; iter < iterations; iter++) {
+      for (let i = 0; i < this.bodies.length; i++) {
+        for (let j = i + 1; j < this.bodies.length; j++) {
+          const bodyA = this.bodies[i];
+          const bodyB = this.bodies[j];
 
-        if (bodyA.type === "circle" && bodyB.type === "circle") {
-          this.resolveCircleCircle(bodyA, bodyB);
-        } else if (bodyA.type === "circle" && bodyB.type === "rectangle") {
-          this.resolveCircleRectangle(bodyA, bodyB);
-        } else if (bodyA.type === "rectangle" && bodyB.type === "circle") {
-          this.resolveCircleRectangle(bodyB, bodyA);
-        } else if (bodyA.type === "circle" && bodyB.type === "windmill") {
-          this.resolveCircleWindmill(bodyA, bodyB);
-        } else if (bodyA.type === "windmill" && bodyB.type === "circle") {
-          this.resolveCircleWindmill(bodyB, bodyA);
+          if (bodyA.type === "circle" && bodyB.type === "circle") {
+            this.resolveCircleCircle(bodyA, bodyB);
+          } else if (bodyA.type === "circle" && bodyB.type === "rectangle") {
+            this.resolveCircleRectangle(bodyA, bodyB);
+          } else if (bodyA.type === "rectangle" && bodyB.type === "circle") {
+            this.resolveCircleRectangle(bodyB, bodyA);
+          } else if (bodyA.type === "circle" && bodyB.type === "windmill") {
+            this.resolveCircleWindmill(bodyA, bodyB);
+          } else if (bodyA.type === "windmill" && bodyB.type === "circle") {
+            this.resolveCircleWindmill(bodyB, bodyA);
+          }
         }
       }
     }
@@ -331,31 +360,43 @@ class PhysicsEngine {
       const ny = dy / distance;
       const penetration = minDistance - distance;
 
+      // Separate balls with small buffer
+      const separationBuffer = 1.02;
       if (!circleA.isStatic && !circleB.isStatic) {
-        circleA.position.x -= (nx * penetration) / 2;
-        circleA.position.y -= (ny * penetration) / 2;
-        circleB.position.x += (nx * penetration) / 2;
-        circleB.position.y += (ny * penetration) / 2;
+        circleA.position.x -= (nx * penetration * separationBuffer) / 2;
+        circleA.position.y -= (ny * penetration * separationBuffer) / 2;
+        circleB.position.x += (nx * penetration * separationBuffer) / 2;
+        circleB.position.y += (ny * penetration * separationBuffer) / 2;
       } else if (!circleA.isStatic) {
-        circleA.position.x -= nx * penetration;
-        circleA.position.y -= ny * penetration;
+        circleA.position.x -= nx * penetration * separationBuffer;
+        circleA.position.y -= ny * penetration * separationBuffer;
       } else if (!circleB.isStatic) {
-        circleB.position.x += nx * penetration;
-        circleB.position.y += ny * penetration;
+        circleB.position.x += nx * penetration * separationBuffer;
+        circleB.position.y += ny * penetration * separationBuffer;
       }
 
       const relVelX = circleA.velocity.x - circleB.velocity.x;
       const relVelY = circleA.velocity.y - circleB.velocity.y;
       const velAlongNormal = relVelX * nx + relVelY * ny;
 
-      if (velAlongNormal > 0) return;
+      // Only apply impulse if balls are approaching (velAlongNormal > 0)
+      // Skip if already separating (velAlongNormal <= 0)
+      if (velAlongNormal <= 0) return;
 
-      const restitution = Math.min(circleA.restitution, circleB.restitution);
-      let impulseMagnitude = -(1 + restitution) * velAlongNormal;
+      // Tennis ball-like restitution (bouncy but controlled)
+      const restitution =
+        Math.min(circleA.restitution, circleB.restitution) * 0.85;
+
+      // Impulse magnitude (positive when approaching)
+      let impulseMagnitude = (1 + restitution) * velAlongNormal;
 
       if (!circleA.isStatic && !circleB.isStatic) {
         impulseMagnitude /= 1 / circleA.mass + 1 / circleB.mass;
       }
+
+      // Cap the impulse magnitude to prevent extreme bounces
+      const maxImpulse = 25;
+      impulseMagnitude = Math.min(impulseMagnitude, maxImpulse);
 
       const impulseX = impulseMagnitude * nx;
       const impulseY = impulseMagnitude * ny;
@@ -363,32 +404,14 @@ class PhysicsEngine {
       if (!circleA.isStatic) {
         circleA.velocity.x -= impulseX / circleA.mass;
         circleA.velocity.y -= impulseY / circleA.mass;
-
-        const speedA = Math.sqrt(
-          circleA.velocity.x ** 2 + circleA.velocity.y ** 2
-        );
-        const randA = this.addRandomness(
-          circleA.velocity.x,
-          circleA.velocity.y,
-          speedA
-        );
-        circleA.velocity.x = randA.vx;
-        circleA.velocity.y = randA.vy;
+        // No randomness for ball-to-ball - clamp immediately
+        this.clampVelocity(circleA);
       }
       if (!circleB.isStatic) {
         circleB.velocity.x += impulseX / circleB.mass;
         circleB.velocity.y += impulseY / circleB.mass;
-
-        const speedB = Math.sqrt(
-          circleB.velocity.x ** 2 + circleB.velocity.y ** 2
-        );
-        const randB = this.addRandomness(
-          circleB.velocity.x,
-          circleB.velocity.y,
-          speedB
-        );
-        circleB.velocity.x = randB.vx;
-        circleB.velocity.y = randB.vy;
+        // No randomness for ball-to-ball - clamp immediately
+        this.clampVelocity(circleB);
       }
     }
   }
@@ -421,19 +444,48 @@ class PhysicsEngine {
     const dy = circle.position.y - closestY;
     const distance = Math.sqrt(dx * dx + dy * dy);
 
-    if (distance < circle.radius) {
+    // Safety margin to prevent edge penetration
+    const safetyMargin = 0.5;
+    const effectiveRadius = circle.radius + safetyMargin;
+
+    if (distance < effectiveRadius) {
       let nx, ny;
       if (distance === 0) {
-        nx = 0;
-        ny = -1;
+        // Circle center is inside rectangle - push in the direction perpendicular to closest edge
+        // Determine which edge is closest based on local position
+        const distToLeft = localX + hw;
+        const distToRight = hw - localX;
+        const distToTop = localY + hh;
+        const distToBottom = hh - localY;
+        const minDist = Math.min(
+          distToLeft,
+          distToRight,
+          distToTop,
+          distToBottom
+        );
+
+        if (minDist === distToLeft) {
+          nx = -Math.cos(rect.angle);
+          ny = -Math.sin(rect.angle);
+        } else if (minDist === distToRight) {
+          nx = Math.cos(rect.angle);
+          ny = Math.sin(rect.angle);
+        } else if (minDist === distToTop) {
+          nx = Math.sin(rect.angle);
+          ny = -Math.cos(rect.angle);
+        } else {
+          nx = -Math.sin(rect.angle);
+          ny = Math.cos(rect.angle);
+        }
       } else {
         nx = dx / distance;
         ny = dy / distance;
       }
 
-      const penetration = circle.radius - distance;
-      circle.position.x += nx * penetration;
-      circle.position.y += ny * penetration;
+      // Push out with safety margin
+      const penetration = effectiveRadius - distance;
+      circle.position.x += nx * penetration * 1.01; // Extra 1% to ensure separation
+      circle.position.y += ny * penetration * 1.01;
 
       const velAlongNormal = circle.velocity.x * nx + circle.velocity.y * ny;
 
@@ -445,8 +497,9 @@ class PhysicsEngine {
         const tx = -ny;
         const ty = nx;
         const velAlongTangent = circle.velocity.x * tx + circle.velocity.y * ty;
-        circle.velocity.x -= velAlongTangent * circle.friction * 2 * tx;
-        circle.velocity.y -= velAlongTangent * circle.friction * 2 * ty;
+        // Reduced friction for faster rolling on inclines
+        circle.velocity.x -= velAlongTangent * circle.friction * 0.8 * tx;
+        circle.velocity.y -= velAlongTangent * circle.friction * 0.8 * ty;
 
         const speed = Math.sqrt(
           circle.velocity.x ** 2 + circle.velocity.y ** 2
@@ -458,6 +511,9 @@ class PhysicsEngine {
         );
         circle.velocity.x = rand.vx;
         circle.velocity.y = rand.vy;
+
+        // Clamp velocity after collision
+        this.clampVelocity(circle);
       }
     }
   }
@@ -492,6 +548,9 @@ class PhysicsEngine {
 
     const arms = windmill.getArms();
 
+    // Safety margin to prevent edge penetration
+    const safetyMargin = 0.5;
+
     for (const arm of arms) {
       // Transform circle position to arm's local space
       const cos = Math.cos(-arm.angle);
@@ -519,9 +578,12 @@ class PhysicsEngine {
       const dy = circle.position.y - closestY;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      if (distance < circle.radius) {
+      const effectiveRadius = circle.radius + safetyMargin;
+
+      if (distance < effectiveRadius) {
         let nx, ny;
         if (distance === 0) {
+          // Circle center is on the arm - push perpendicular to arm
           nx = Math.cos(arm.angle + Math.PI / 2);
           ny = Math.sin(arm.angle + Math.PI / 2);
         } else {
@@ -529,9 +591,10 @@ class PhysicsEngine {
           ny = dy / distance;
         }
 
-        const penetration = circle.radius - distance;
-        circle.position.x += nx * penetration * 1.05;
-        circle.position.y += ny * penetration * 1.05;
+        // Push out with safety margin and extra buffer
+        const penetration = effectiveRadius - distance;
+        circle.position.x += nx * penetration * 1.02;
+        circle.position.y += ny * penetration * 1.02;
 
         // Calculate arm velocity at contact point relative to windmill center
         const contactFromCenterX = closestX - windmill.position.x;
@@ -586,29 +649,36 @@ class PhysicsEngine {
         circle.velocity.x = rand.vx;
         circle.velocity.y = rand.vy;
 
+        // Clamp velocity after collision
+        this.clampVelocity(circle);
+
         break; // Only handle one arm collision per frame
       }
     }
   }
 
   checkBounds() {
+    // Small safety margin for wall collisions
+    const margin = 0.5;
+
     for (const body of this.bodies) {
       if (body.isStatic || body.type !== "circle") continue;
 
       let bounced = false;
+      const effectiveRadius = body.radius + margin;
 
-      if (body.position.x - body.radius < this.bounds.left) {
-        body.position.x = this.bounds.left + body.radius;
+      if (body.position.x - effectiveRadius < this.bounds.left) {
+        body.position.x = this.bounds.left + effectiveRadius;
         body.velocity.x *= -body.restitution;
         bounced = true;
       }
-      if (body.position.x + body.radius > this.bounds.right) {
-        body.position.x = this.bounds.right - body.radius;
+      if (body.position.x + effectiveRadius > this.bounds.right) {
+        body.position.x = this.bounds.right - effectiveRadius;
         body.velocity.x *= -body.restitution;
         bounced = true;
       }
-      if (body.position.y - body.radius < this.bounds.top) {
-        body.position.y = this.bounds.top + body.radius;
+      if (body.position.y - effectiveRadius < this.bounds.top) {
+        body.position.y = this.bounds.top + effectiveRadius;
         body.velocity.y *= -body.restitution;
         bounced = true;
       }
