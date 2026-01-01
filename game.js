@@ -16,13 +16,33 @@ class Game {
     this.physics = new PhysicsEngine();
     this.physics.setBounds(0, this.width, 0, this.height);
 
-    this.player1 = null;
-    this.player2 = null;
+    // Multiple players support
+    this.players = [];
+    this.numBalls = 2; // Default number of balls
+    this.playerColors = [
+      "#e74c3c", // red
+      "#3498db", // blue
+      "#2ecc71", // green
+      "#f39c12", // orange
+      "#9b59b6", // purple
+      "#1abc9c", // teal
+      "#e91e63", // pink
+      "#00bcd4", // cyan
+      "#ff5722", // deep orange
+      "#607d8b", // blue grey
+      "#795548", // brown
+      "#cddc39", // lime
+      "#673ab7", // deep purple
+      "#009688", // teal dark
+      "#ff9800", // amber
+      "#4caf50", // green dark
+    ];
+    this.avatarImages = []; // Array of avatar images
 
     this.gameState = "waiting";
     this.editMode = false;
     this.gameMode = "stages"; // "stages" or "serpentine"
-    this.wins = { player1: 0, player2: 0 };
+    this.wins = []; // Array of wins per player
     this.obstacles = [];
     this.windmills = [];
     this.stages = [];
@@ -67,7 +87,11 @@ class Game {
     this.wins2El = document.getElementById("wins2");
     this.editHint = document.getElementById("editHint");
     this.mirrorModeCheckbox = document.getElementById("mirrorMode");
+    this.spinnerStartCheckbox = document.getElementById("spinnerStart");
     this.modeButtons = document.querySelectorAll(".mode-btn");
+    this.avatarOverlay = document.getElementById("avatarOverlay");
+    this.avatarDivs = []; // HTML divs for high-quality avatar rendering
+    this.avatarDataUrls = []; // Store original data URLs for high-quality rendering
 
     // Obstacle type buttons
     this.typeButtons = document.querySelectorAll(".type-btn");
@@ -75,6 +99,7 @@ class Game {
     this.windmillSettings = document.getElementById("windmillSettings");
 
     // Sliders
+    this.numBallsSlider = document.getElementById("numBalls");
     this.gravitySlider = document.getElementById("gravity");
     this.bounceSlider = document.getElementById("bounce");
     this.frictionSlider = document.getElementById("friction");
@@ -85,17 +110,13 @@ class Game {
     this.windmillSpeedSlider = document.getElementById("windmillSpeed");
     this.windmillDirSelect = document.getElementById("windmillDir");
 
-    // Avatar elements
-    this.avatar1Input = document.getElementById("avatar1Input");
-    this.avatar2Input = document.getElementById("avatar2Input");
-    this.avatar1Preview = document.getElementById("avatar1Preview");
-    this.avatar2Preview = document.getElementById("avatar2Preview");
-    this.clearAvatar1Btn = document.getElementById("clearAvatar1");
-    this.clearAvatar2Btn = document.getElementById("clearAvatar2");
-    this.avatar1Image = null;
-    this.avatar2Image = null;
+    // Avatar elements - dynamic container
+    this.avatarUploadContainer = document.getElementById(
+      "avatarUploadContainer"
+    );
 
     // Value displays
+    this.numBallsValue = document.getElementById("numBallsValue");
     this.gravityValue = document.getElementById("gravityValue");
     this.bounceValue = document.getElementById("bounceValue");
     this.frictionValue = document.getElementById("frictionValue");
@@ -114,6 +135,10 @@ class Game {
 
   init() {
     this.bindEvents();
+    // Set avatar overlay height to match canvas
+    this.avatarOverlay.style.height = `${this.height}px`;
+    // Generate avatar input fields for current number of balls
+    this.generateAvatarInputs();
     this.generateTrack();
     requestAnimationFrame((t) => this.gameLoop(t));
   }
@@ -195,6 +220,17 @@ class Game {
       }
     });
 
+    // Number of balls slider
+    this.numBallsSlider.addEventListener("input", (e) => {
+      const value = parseInt(e.target.value);
+      this.numBalls = value;
+      this.numBallsValue.textContent = value;
+      this.generateAvatarInputs();
+      if (this.gameState === "waiting") {
+        this.resetPlayers();
+      }
+    });
+
     // Physics sliders
     this.gravitySlider.addEventListener("input", (e) => {
       const value = parseFloat(e.target.value);
@@ -206,27 +242,21 @@ class Game {
 
     this.bounceSlider.addEventListener("input", (e) => {
       const value = parseFloat(e.target.value);
-      if (this.player1) this.player1.restitution = value;
-      if (this.player2) this.player2.restitution = value;
+      for (const player of this.players) {
+        player.restitution = value;
+      }
       this.bounceValue.textContent = value.toFixed(1);
     });
 
     this.frictionSlider.addEventListener("input", (e) => {
       const value = parseFloat(e.target.value);
-      if (this.player1) this.player1.friction = value;
-      if (this.player2) this.player2.friction = value;
+      for (const player of this.players) {
+        player.friction = value;
+      }
       this.frictionValue.textContent = value.toFixed(2);
     });
 
-    // Avatar upload handlers
-    this.avatar1Input.addEventListener("change", (e) => {
-      this.loadAvatar(e.target.files[0], 1);
-    });
-    this.avatar2Input.addEventListener("change", (e) => {
-      this.loadAvatar(e.target.files[0], 2);
-    });
-    this.clearAvatar1Btn.addEventListener("click", () => this.clearAvatar(1));
-    this.clearAvatar2Btn.addEventListener("click", () => this.clearAvatar(2));
+    // Avatar upload handlers are set up dynamically in generateAvatarInputs()
 
     // Track length slider
     this.trackLengthSlider.addEventListener("input", (e) => {
@@ -394,6 +424,7 @@ class Game {
   setTrackLength(length) {
     this.height = length;
     this.canvas.height = this.height;
+    this.avatarOverlay.style.height = `${this.height}px`;
     this.physics.setBounds(0, this.width, 0, this.height);
     this.finishLine = this.height - 40;
     this.generateTrack();
@@ -443,87 +474,254 @@ class Game {
   createPlayers() {
     const bounce = parseFloat(this.bounceSlider.value);
     const friction = parseFloat(this.frictionSlider.value);
+    const radius = this.gameMode === "serpentine" ? 15 : 18;
 
-    if (this.gameMode === "serpentine") {
-      // In serpentine mode, players start at top left of corridor
-      this.player1 = new Circle(80, 70, 15, 1);
-      this.player2 = new Circle(120, 70, 15, 1);
-    } else {
-      // Standard symmetric positions
-      this.player1 = new Circle(this.width * 0.35, 50, 18, 1);
-      this.player2 = new Circle(this.width * 0.65, 50, 18, 1);
+    this.players = [];
+
+    // Clear old avatar divs
+    this.clearAvatarDivs();
+
+    // Initialize wins array if needed
+    while (this.wins.length < this.numBalls) {
+      this.wins.push(0);
     }
 
-    this.player1.restitution = bounce;
-    this.player1.friction = friction;
-    this.player2.restitution = bounce;
-    this.player2.friction = friction;
+    for (let i = 0; i < this.numBalls; i++) {
+      let x, y;
 
-    // Apply avatars if loaded
-    if (this.avatar1Image) {
-      this.player1.image = this.avatar1Image;
-    }
-    if (this.avatar2Image) {
-      this.player2.image = this.avatar2Image;
+      if (this.gameMode === "serpentine") {
+        // In serpentine mode, stack players vertically at start
+        x = 80 + (i % 2) * 40;
+        y = 70 + Math.floor(i / 2) * 30;
+      } else {
+        // Spread players across the width
+        const spacing = this.width / (this.numBalls + 1);
+        x = spacing * (i + 1);
+        y = 50;
+      }
+
+      const player = new Circle(x, y, radius, 1);
+      player.restitution = bounce;
+      player.friction = friction;
+      player.color = this.playerColors[i % this.playerColors.length];
+      player.avatarDiv = null; // Reference to HTML div
+
+      // Apply avatar if loaded and create div
+      if (this.avatarImages[i]) {
+        player.image = this.avatarImages[i];
+        this.createAvatarDiv(player, i, radius);
+      }
+
+      this.players.push(player);
+      this.physics.addBody(player);
     }
 
-    this.physics.addBody(this.player1);
-    this.physics.addBody(this.player2);
+    // Keep backwards compatibility
+    this.player1 = this.players[0] || null;
+    this.player2 = this.players[1] || null;
   }
 
-  loadAvatar(file, playerNum) {
+  createAvatarDiv(player, index, radius) {
+    // Create HTML div for high-quality avatar rendering
+    const div = document.createElement("div");
+    div.className = "avatar-ball";
+    div.style.width = `${radius * 2}px`;
+    div.style.height = `${radius * 2}px`;
+    div.style.borderColor = player.color;
+
+    // Use original file URL for best quality
+    const img = document.createElement("img");
+    if (this.avatarDataUrls && this.avatarDataUrls[index]) {
+      img.src = this.avatarDataUrls[index];
+    }
+    div.appendChild(img);
+
+    this.avatarOverlay.appendChild(div);
+    this.avatarDivs.push(div);
+    player.avatarDiv = div;
+  }
+
+  clearAvatarDivs() {
+    for (const div of this.avatarDivs) {
+      div.remove();
+    }
+    this.avatarDivs = [];
+  }
+
+  updateAvatarDivPositions() {
+    for (const player of this.players) {
+      if (player.avatarDiv) {
+        // Position relative to canvas, accounting for scroll
+        const x = player.position.x;
+        const y = player.position.y;
+        player.avatarDiv.style.left = `${x}px`;
+        player.avatarDiv.style.top = `${y}px`;
+        player.avatarDiv.style.transform = `translate(-50%, -50%) rotate(${player.angle}rad)`;
+      }
+    }
+  }
+
+  generateAvatarInputs() {
+    // Clear existing inputs
+    this.avatarUploadContainer.innerHTML = "";
+
+    // Create input for each ball
+    for (let i = 0; i < this.numBalls; i++) {
+      const playerNum = i + 1;
+      const color = this.playerColors[i % this.playerColors.length];
+
+      const item = document.createElement("div");
+      item.className = "avatar-item";
+
+      const label = document.createElement("label");
+      label.textContent = `${playerNum}:`;
+      label.style.color = color;
+      label.style.fontWeight = "bold";
+
+      const preview = document.createElement("div");
+      preview.className = "avatar-preview";
+      preview.id = `avatarPreview${playerNum}`;
+      preview.style.borderColor = color;
+
+      // Show existing avatar if loaded
+      if (this.avatarDataUrls[i]) {
+        preview.innerHTML = `<img src="${this.avatarDataUrls[i]}" alt="Avatar ${playerNum}">`;
+      }
+
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.addEventListener("change", (e) => {
+        this.loadAvatar(e.target.files[0], playerNum);
+      });
+
+      const clearBtn = document.createElement("button");
+      clearBtn.className = "btn-small";
+      clearBtn.textContent = "✕";
+      clearBtn.addEventListener("click", () => {
+        this.clearAvatar(playerNum);
+        input.value = "";
+      });
+
+      item.appendChild(label);
+      item.appendChild(preview);
+      item.appendChild(input);
+      item.appendChild(clearBtn);
+
+      this.avatarUploadContainer.appendChild(item);
+    }
+  }
+
+  async loadAvatar(file, playerNum) {
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        if (playerNum === 1) {
-          this.avatar1Image = img;
-          this.avatar1Preview.innerHTML = `<img src="${e.target.result}" alt="Avatar 1">`;
-          if (this.player1) {
-            this.player1.image = img;
+    // Target size for avatar (accounting for device pixel ratio for crisp rendering)
+    const dpr = window.devicePixelRatio || 1;
+    const targetSize = Math.round(100 * dpr); // 100px base size * pixel ratio
+
+    try {
+      // First load the image to get dimensions
+      const imgBitmap = await createImageBitmap(file);
+      const { width, height } = imgBitmap;
+
+      // Calculate "cover" crop - square from center
+      let sx, sy, sSize;
+      if (width > height) {
+        // Landscape - crop sides
+        sSize = height;
+        sx = (width - height) / 2;
+        sy = 0;
+      } else {
+        // Portrait or square - crop top/bottom
+        sSize = width;
+        sx = 0;
+        sy = (height - width) / 2;
+      }
+
+      // Create cropped and scaled bitmap with high quality
+      const bitmap = await createImageBitmap(imgBitmap, sx, sy, sSize, sSize, {
+        resizeWidth: targetSize,
+        resizeHeight: targetSize,
+        resizeQuality: "high",
+      });
+
+      // Store in avatarImages array (0-indexed)
+      const idx = playerNum - 1;
+      this.avatarImages[idx] = bitmap;
+
+      // Also load original for preview and high-quality div
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        this.avatarDataUrls[idx] = dataUrl;
+
+        // Update preview (dynamic element)
+        const preview = document.getElementById(`avatarPreview${playerNum}`);
+        if (preview) {
+          preview.innerHTML = `<img src="${dataUrl}" alt="Avatar ${playerNum}">`;
+        }
+
+        // Update or create avatar div for existing player
+        if (this.players[idx]) {
+          const player = this.players[idx];
+          player.image = bitmap;
+
+          // Remove old div if exists
+          if (player.avatarDiv) {
+            player.avatarDiv.remove();
+            const divIdx = this.avatarDivs.indexOf(player.avatarDiv);
+            if (divIdx > -1) this.avatarDivs.splice(divIdx, 1);
           }
-        } else {
-          this.avatar2Image = img;
-          this.avatar2Preview.innerHTML = `<img src="${e.target.result}" alt="Avatar 2">`;
-          if (this.player2) {
-            this.player2.image = img;
+
+          // Create new div with high-quality image
+          const radius = this.gameMode === "serpentine" ? 15 : 18;
+          this.createAvatarDiv(player, idx, radius);
+
+          // Update img src
+          if (player.avatarDiv) {
+            const img = player.avatarDiv.querySelector("img");
+            if (img) img.src = dataUrl;
           }
         }
       };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error("Error loading avatar:", err);
+    }
   }
 
   clearAvatar(playerNum) {
-    if (playerNum === 1) {
-      this.avatar1Image = null;
-      this.avatar1Preview.innerHTML = "";
-      this.avatar1Input.value = "";
-      if (this.player1) {
-        this.player1.image = null;
+    const idx = playerNum - 1;
+    this.avatarImages[idx] = null;
+    this.avatarDataUrls[idx] = null;
+
+    if (this.players[idx]) {
+      const player = this.players[idx];
+      player.image = null;
+
+      // Remove avatar div
+      if (player.avatarDiv) {
+        player.avatarDiv.remove();
+        const divIdx = this.avatarDivs.indexOf(player.avatarDiv);
+        if (divIdx > -1) this.avatarDivs.splice(divIdx, 1);
+        player.avatarDiv = null;
       }
-    } else {
-      this.avatar2Image = null;
-      this.avatar2Preview.innerHTML = "";
-      this.avatar2Input.value = "";
-      if (this.player2) {
-        this.player2.image = null;
-      }
+    }
+
+    // Clear preview (dynamic element)
+    const preview = document.getElementById(`avatarPreview${playerNum}`);
+    if (preview) {
+      preview.innerHTML = "";
     }
   }
 
   removePlayers() {
-    if (this.player1) {
-      this.physics.removeBody(this.player1);
-      this.player1 = null;
+    for (const player of this.players) {
+      this.physics.removeBody(player);
     }
-    if (this.player2) {
-      this.physics.removeBody(this.player2);
-      this.player2 = null;
-    }
+    this.players = [];
+    this.player1 = null;
+    this.player2 = null;
   }
 
   resetPlayers() {
@@ -921,35 +1119,40 @@ class Game {
   startRace() {
     if (this.gameState !== "waiting" || this.editMode) return;
 
-    // Start countdown with spinner
-    this.gameState = "countdown";
-    this.countdownTime = 0;
-    this.spinnerAngle = 0;
-    this.spinnerSpeed = 0.03;
     this.startBtn.disabled = true;
     this.editBtn.disabled = true;
     this.currentScrollY = 0;
     this.targetScrollY = 0;
     this.canvasWrapper.scrollTop = 0;
 
-    // Enable gravity for countdown
+    // Enable gravity
     this.physics.setGravity(0, parseFloat(this.gravitySlider.value));
 
-    // Position players on opposite sides inside spinner
-    const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
-    const centerY = 90;
-    const ballOffset = 30;
+    // Check if spinner start is enabled
+    if (this.spinnerStartCheckbox.checked) {
+      // Start countdown with spinner
+      this.gameState = "countdown";
+      this.countdownTime = 0;
+      this.spinnerAngle = 0;
+      this.spinnerSpeed = 0.03;
 
-    if (this.player1 && this.player2) {
-      this.player1.position.x = centerX - ballOffset;
-      this.player1.position.y = centerY;
-      this.player1.velocity.x = 0;
-      this.player1.velocity.y = 0;
+      // Position players inside spinner
+      const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+      const centerY = 90;
 
-      this.player2.position.x = centerX + ballOffset;
-      this.player2.position.y = centerY;
-      this.player2.velocity.x = 0;
-      this.player2.velocity.y = 0;
+      // Arrange players in a circle inside spinner
+      const numPlayers = this.players.length;
+      for (let i = 0; i < numPlayers; i++) {
+        const angle = (i / numPlayers) * Math.PI * 2 - Math.PI / 2;
+        const dist = Math.min(30, this.spinnerRadius * 0.5);
+        this.players[i].position.x = centerX + Math.cos(angle) * dist;
+        this.players[i].position.y = centerY + Math.sin(angle) * dist;
+        this.players[i].velocity.x = 0;
+        this.players[i].velocity.y = 0;
+      }
+    } else {
+      // Start immediately without spinner
+      this.gameState = "racing";
     }
   }
 
@@ -968,10 +1171,8 @@ class Game {
     const radius = this.spinnerRadius;
 
     // Constrain balls to spinner circle (physics engine handles the rest)
-    if (this.player1 && this.player2) {
-      const balls = [this.player1, this.player2];
-
-      for (const ball of balls) {
+    if (this.players.length > 0) {
+      for (const ball of this.players) {
         const dx = ball.position.x - centerX;
         const dy = ball.position.y - centerY;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -1025,9 +1226,10 @@ class Game {
 
   autoScroll() {
     if (this.gameState !== "racing") return;
-    if (!this.player1 || !this.player2) return;
+    if (this.players.length === 0) return;
 
-    const lowestY = Math.max(this.player1.position.y, this.player2.position.y);
+    // Find lowest player
+    const lowestY = Math.max(...this.players.map((p) => p.position.y));
 
     const wrapperHeight = this.canvasWrapper.clientHeight;
     const maxScroll = this.canvas.height - wrapperHeight;
@@ -1043,30 +1245,35 @@ class Game {
 
   checkWinner() {
     if (this.gameState !== "racing") return;
-    if (!this.player1 || !this.player2) return;
+    if (this.players.length === 0) return;
 
-    const p1Finished =
-      this.player1.position.y + this.player1.radius >= this.finishLine;
-    const p2Finished =
-      this.player2.position.y + this.player2.radius >= this.finishLine;
+    // Check which players finished
+    const finishedPlayers = this.players
+      .map((p, i) => ({
+        player: p,
+        index: i,
+        finished: p.position.y + p.radius >= this.finishLine,
+      }))
+      .filter((p) => p.finished);
 
-    if (p1Finished || p2Finished) {
+    if (finishedPlayers.length > 0) {
       this.gameState = "finished";
       this.physics.setGravity(0, 0);
 
-      let winner;
-      if (p1Finished && p2Finished) {
-        winner = this.player1.position.y > this.player2.position.y ? 1 : 2;
-      } else {
-        winner = p1Finished ? 1 : 2;
-      }
+      // Winner is the one lowest (furthest ahead)
+      let winner = finishedPlayers.reduce((a, b) =>
+        a.player.position.y > b.player.position.y ? a : b
+      );
 
-      this.wins[`player${winner}`]++;
-      this.wins1El.textContent = this.wins.player1;
-      this.wins2El.textContent = this.wins.player2;
+      const winnerNum = winner.index + 1;
+      this.wins[winner.index]++;
 
-      this.winnerText.textContent = `GRACZ ${winner} WYGRYWA!`;
-      this.winnerText.className = `winner-text player${winner}`;
+      // Update scoreboard for first two players
+      if (this.wins[0] !== undefined) this.wins1El.textContent = this.wins[0];
+      if (this.wins[1] !== undefined) this.wins2El.textContent = this.wins[1];
+
+      this.winnerText.textContent = `GRACZ ${winnerNum} WYGRYWA!`;
+      this.winnerText.className = `winner-text player${winnerNum}`;
       this.winnerOverlay.classList.add("active");
       this.startBtn.disabled = false;
       this.editBtn.disabled = false;
@@ -1266,22 +1473,6 @@ class Game {
       this.drawElementHighlight(this.hoveredElement);
     }
 
-    if (this.player1 && this.player2) {
-      this.ctx.fillStyle = "#000";
-      this.ctx.font = "bold 11px sans-serif";
-      this.ctx.textAlign = "center";
-      this.ctx.fillText(
-        "1",
-        this.player1.position.x,
-        this.player1.position.y + 4
-      );
-      this.ctx.fillText(
-        "2",
-        this.player2.position.x,
-        this.player2.position.y + 4
-      );
-    }
-
     this.drawObstaclePreview();
   }
 
@@ -1396,6 +1587,7 @@ class Game {
     }
 
     this.draw();
+    this.updateAvatarDivPositions();
     this.autoScroll();
     this.checkWinner();
 

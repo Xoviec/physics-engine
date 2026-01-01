@@ -30,6 +30,7 @@
 
         <div class="canvas-wrapper" id="canvasWrapper">
           <canvas id="gameCanvas"></canvas>
+          <div class="avatar-overlay" id="avatarOverlay"></div>
           <div class="edit-hint" id="editHint">
             Kliknij aby dodać przeszkodę
           </div>
@@ -57,6 +58,24 @@
       <div class="panels">
         <div class="settings-panel">
           <h3>PARAMETRY FIZYKI</h3>
+          <div class="setting">
+            <label for="numBalls">Liczba kulek</label>
+            <input
+              type="range"
+              id="numBalls"
+              min="2"
+              max="16"
+              step="1"
+              value="2"
+            />
+            <span id="numBallsValue">2</span>
+          </div>
+          <div class="checkbox-setting">
+            <label class="checkbox-label">
+              <input type="checkbox" id="spinnerStart" />
+              Start z okręgiem
+            </label>
+          </div>
           <div class="setting">
             <label for="gravity">Grawitacja</label>
             <input
@@ -97,19 +116,8 @@
 
         <div class="settings-panel">
           <h3>AVATARY GRACZY</h3>
-          <div class="avatar-upload">
-            <div class="avatar-item">
-              <label>Gracz 1:</label>
-              <div class="avatar-preview" id="avatar1Preview"></div>
-              <input type="file" id="avatar1Input" accept="image/*" />
-              <button class="btn-small" id="clearAvatar1">✕</button>
-            </div>
-            <div class="avatar-item">
-              <label>Gracz 2:</label>
-              <div class="avatar-preview" id="avatar2Preview"></div>
-              <input type="file" id="avatar2Input" accept="image/*" />
-              <button class="btn-small" id="clearAvatar2">✕</button>
-            </div>
+          <div class="avatar-upload" id="avatarUploadContainer">
+            <!-- Avatar inputs generated dynamically by JavaScript -->
           </div>
         </div>
 

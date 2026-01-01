@@ -95,8 +95,20 @@ class Circle extends PhysicsBody {
     ctx.save();
     ctx.translate(this.position.x, this.position.y);
 
+    // If using HTML div for avatar, skip canvas drawing of image
+    if (this.avatarDiv) {
+      // Just draw colored circle outline (image rendered by HTML)
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
     if (this.image) {
-      // High quality image rendering
+      // High quality image rendering (fallback if no HTML div)
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = "high";
 
@@ -114,30 +126,9 @@ class Circle extends PhysicsBody {
       // Apply rotation
       ctx.rotate(this.angle);
 
-      // Calculate "cover" sizing - fill the circle while maintaining aspect ratio
-      const img = this.image;
-      const imgAspect = img.width / img.height;
+      // Draw pre-scaled high-quality image (already square from createImageBitmap)
       const diameter = this.radius * 2;
-
-      let drawWidth, drawHeight;
-      if (imgAspect > 1) {
-        // Image is wider - fit height, crop width
-        drawHeight = diameter;
-        drawWidth = diameter * imgAspect;
-      } else {
-        // Image is taller - fit width, crop height
-        drawWidth = diameter;
-        drawHeight = diameter / imgAspect;
-      }
-
-      // Center the image
-      ctx.drawImage(
-        img,
-        -drawWidth / 2,
-        -drawHeight / 2,
-        drawWidth,
-        drawHeight
-      );
+      ctx.drawImage(this.image, -this.radius, -this.radius, diameter, diameter);
 
       ctx.restore();
 
