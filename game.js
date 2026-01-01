@@ -85,6 +85,16 @@ class Game {
     this.windmillSpeedSlider = document.getElementById("windmillSpeed");
     this.windmillDirSelect = document.getElementById("windmillDir");
 
+    // Avatar elements
+    this.avatar1Input = document.getElementById("avatar1Input");
+    this.avatar2Input = document.getElementById("avatar2Input");
+    this.avatar1Preview = document.getElementById("avatar1Preview");
+    this.avatar2Preview = document.getElementById("avatar2Preview");
+    this.clearAvatar1Btn = document.getElementById("clearAvatar1");
+    this.clearAvatar2Btn = document.getElementById("clearAvatar2");
+    this.avatar1Image = null;
+    this.avatar2Image = null;
+
     // Value displays
     this.gravityValue = document.getElementById("gravityValue");
     this.bounceValue = document.getElementById("bounceValue");
@@ -207,6 +217,16 @@ class Game {
       if (this.player2) this.player2.friction = value;
       this.frictionValue.textContent = value.toFixed(2);
     });
+
+    // Avatar upload handlers
+    this.avatar1Input.addEventListener("change", (e) => {
+      this.loadAvatar(e.target.files[0], 1);
+    });
+    this.avatar2Input.addEventListener("change", (e) => {
+      this.loadAvatar(e.target.files[0], 2);
+    });
+    this.clearAvatar1Btn.addEventListener("click", () => this.clearAvatar(1));
+    this.clearAvatar2Btn.addEventListener("click", () => this.clearAvatar(2));
 
     // Track length slider
     this.trackLengthSlider.addEventListener("input", (e) => {
@@ -439,8 +459,60 @@ class Game {
     this.player2.restitution = bounce;
     this.player2.friction = friction;
 
+    // Apply avatars if loaded
+    if (this.avatar1Image) {
+      this.player1.image = this.avatar1Image;
+    }
+    if (this.avatar2Image) {
+      this.player2.image = this.avatar2Image;
+    }
+
     this.physics.addBody(this.player1);
     this.physics.addBody(this.player2);
+  }
+
+  loadAvatar(file, playerNum) {
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        if (playerNum === 1) {
+          this.avatar1Image = img;
+          this.avatar1Preview.innerHTML = `<img src="${e.target.result}" alt="Avatar 1">`;
+          if (this.player1) {
+            this.player1.image = img;
+          }
+        } else {
+          this.avatar2Image = img;
+          this.avatar2Preview.innerHTML = `<img src="${e.target.result}" alt="Avatar 2">`;
+          if (this.player2) {
+            this.player2.image = img;
+          }
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  clearAvatar(playerNum) {
+    if (playerNum === 1) {
+      this.avatar1Image = null;
+      this.avatar1Preview.innerHTML = "";
+      this.avatar1Input.value = "";
+      if (this.player1) {
+        this.player1.image = null;
+      }
+    } else {
+      this.avatar2Image = null;
+      this.avatar2Preview.innerHTML = "";
+      this.avatar2Input.value = "";
+      if (this.player2) {
+        this.player2.image = null;
+      }
+    }
   }
 
   removePlayers() {

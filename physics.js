@@ -77,14 +77,57 @@ class Circle extends PhysicsBody {
     this.radius = radius;
     this.type = "circle";
     this.color = "#000";
+    this.image = null; // Avatar image
+    this.angle = 0; // Rotation angle for avatar
+    this.angularVelocity = 0;
+  }
+
+  update(dt) {
+    if (this.isStatic) return;
+    super.update(dt);
+    // Update rotation based on horizontal velocity (rolling motion)
+    // Angular velocity = linear velocity / radius
+    this.angularVelocity = this.velocity.x / this.radius;
+    this.angle += this.angularVelocity * dt * 0.1;
   }
 
   draw(ctx) {
-    ctx.beginPath();
-    ctx.arc(this.position.x, this.position.y, this.radius, 0, Math.PI * 2);
-    ctx.strokeStyle = this.color;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.save();
+    ctx.translate(this.position.x, this.position.y);
+
+    if (this.image) {
+      // Draw avatar image with rotation
+      ctx.rotate(this.angle);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(
+        this.image,
+        -this.radius,
+        -this.radius,
+        this.radius * 2,
+        this.radius * 2
+      );
+      ctx.restore();
+
+      // Draw border around avatar
+      ctx.save();
+      ctx.translate(this.position.x, this.position.y);
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Draw simple circle outline
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.strokeStyle = this.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 }
 
