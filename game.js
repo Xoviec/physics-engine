@@ -38,6 +38,13 @@ class Game {
     this.currentScrollY = 0;
     this.targetScrollY = 0;
 
+    // Start spinner
+    this.spinnerAngle = 0;
+    this.spinnerSpeed = 0.05;
+    this.spinnerRadius = 70;
+    this.countdownTime = 0;
+    this.countdownDuration = 3000; // 3 seconds
+
     // Current obstacle type and edit mode
     this.obstacleType = "rectangle";
     this.editorMode = "add"; // "add", "move", "delete"
@@ -816,13 +823,97 @@ class Game {
 
   startRace() {
     if (this.gameState !== "waiting" || this.editMode) return;
-    this.gameState = "racing";
+
+    // Start countdown with spinner
+    this.gameState = "countdown";
+    this.countdownTime = 0;
+    this.spinnerAngle = 0;
+    this.spinnerSpeed = 0.03;
     this.startBtn.disabled = true;
     this.editBtn.disabled = true;
     this.currentScrollY = 0;
     this.targetScrollY = 0;
     this.canvasWrapper.scrollTop = 0;
+
+    // Enable gravity for countdown
     this.physics.setGravity(0, parseFloat(this.gravitySlider.value));
+
+    // Position players on opposite sides inside spinner
+    const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+    const centerY = 90;
+    const ballOffset = 30;
+
+    if (this.player1 && this.player2) {
+      this.player1.position.x = centerX - ballOffset;
+      this.player1.position.y = centerY;
+      this.player1.velocity.x = 0;
+      this.player1.velocity.y = 0;
+
+      this.player2.position.x = centerX + ballOffset;
+      this.player2.position.y = centerY;
+      this.player2.velocity.x = 0;
+      this.player2.velocity.y = 0;
+    }
+  }
+
+  updateCountdown(dt) {
+    if (this.gameState !== "countdown") return;
+
+    this.countdownTime += dt;
+
+    // Speed up spinner over time
+    this.spinnerSpeed =
+      0.02 + (this.countdownTime / this.countdownDuration) * 0.05;
+    this.spinnerAngle += this.spinnerSpeed;
+
+    const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+    const centerY = 90;
+    const radius = this.spinnerRadius;
+
+    // Constrain balls to spinner circle (physics engine handles the rest)
+    if (this.player1 && this.player2) {
+      const balls = [this.player1, this.player2];
+
+      for (const ball of balls) {
+        const dx = ball.position.x - centerX;
+        const dy = ball.position.y - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxDist = radius - ball.radius - 2;
+
+        // Keep ball inside spinner circle
+        if (dist > maxDist && dist > 0) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          // Push back inside
+          ball.position.x = centerX + nx * maxDist;
+          ball.position.y = centerY + ny * maxDist;
+
+          // Reflect velocity off circular wall
+          const dot = ball.velocity.x * nx + ball.velocity.y * ny;
+          if (dot > 0) {
+            ball.velocity.x -= 2 * dot * nx * ball.restitution;
+            ball.velocity.y -= 2 * dot * ny * ball.restitution;
+          }
+
+          // Add spin from rotating wall
+          const tangentX = -ny;
+          const tangentY = nx;
+          ball.velocity.x += tangentX * this.spinnerSpeed * 6;
+          ball.velocity.y += tangentY * this.spinnerSpeed * 6;
+        }
+      }
+    }
+
+    // Launch after countdown
+    if (this.countdownTime >= this.countdownDuration) {
+      this.launchRace();
+    }
+  }
+
+  launchRace() {
+    this.gameState = "racing";
+    // Balls already have velocity from bouncing in spinner
   }
 
   reset() {
@@ -830,6 +921,8 @@ class Game {
     this.startBtn.disabled = this.editMode;
     this.editBtn.disabled = false;
     this.winnerOverlay.classList.remove("active");
+    this.spinnerSpeed = 0.08;
+    this.countdownTime = 0;
     this.resetPlayers();
   }
 
@@ -1066,6 +1159,11 @@ class Game {
 
     this.physics.draw(this.ctx);
 
+    // Draw spinner during countdown
+    if (this.gameState === "countdown") {
+      this.drawSpinner();
+    }
+
     // Draw highlight for hovered element in move/delete mode
     if (this.editMode && this.hoveredElement && this.editorMode !== "add") {
       this.drawElementHighlight(this.hoveredElement);
@@ -1088,6 +1186,60 @@ class Game {
     }
 
     this.drawObstaclePreview();
+  }
+
+  drawSpinner() {
+    const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+    const centerY = 90;
+    const radius = this.spinnerRadius;
+
+    this.ctx.save();
+    this.ctx.translate(centerX, centerY);
+    this.ctx.rotate(this.spinnerAngle);
+
+    // Outer spinning ring
+    this.ctx.strokeStyle = "#000";
+    this.ctx.lineWidth = 3;
+    this.ctx.beginPath();
+    this.ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    this.ctx.stroke();
+
+    // Small markers on the ring (outside only)
+    const numMarkers = 12;
+    for (let i = 0; i < numMarkers; i++) {
+      const angle = (i / numMarkers) * Math.PI * 2;
+      const innerR = radius - 8;
+      const outerR = radius;
+      this.ctx.beginPath();
+      this.ctx.moveTo(Math.cos(angle) * innerR, Math.sin(angle) * innerR);
+      this.ctx.lineTo(Math.cos(angle) * outerR, Math.sin(angle) * outerR);
+      this.ctx.strokeStyle = "#000";
+      this.ctx.lineWidth = i % 3 === 0 ? 3 : 1;
+      this.ctx.stroke();
+    }
+
+    this.ctx.restore();
+
+    // Countdown number
+    const secondsLeft = Math.ceil(
+      (this.countdownDuration - this.countdownTime) / 1000
+    );
+    if (secondsLeft > 0 && this.countdownTime < this.countdownDuration - 200) {
+      this.ctx.fillStyle = "#000";
+      this.ctx.font = "bold 28px sans-serif";
+      this.ctx.textAlign = "center";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText(secondsLeft.toString(), centerX, centerY + radius + 30);
+    }
+
+    // "GO!" text when launching
+    if (this.countdownTime >= this.countdownDuration - 200) {
+      this.ctx.fillStyle = "#000";
+      this.ctx.font = "bold 36px sans-serif";
+      this.ctx.textAlign = "center";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText("GO!", centerX, centerY + radius + 30);
+    }
   }
 
   drawElementHighlight(element) {
@@ -1134,8 +1286,13 @@ class Game {
 
     this.accumulator += deltaTime;
 
+    // Update countdown spinner
+    if (this.gameState === "countdown") {
+      this.updateCountdown(deltaTime);
+    }
+
     while (this.accumulator >= this.fixedDt) {
-      if (this.gameState === "racing") {
+      if (this.gameState === "racing" || this.gameState === "countdown") {
         this.physics.update(1);
       }
       this.accumulator -= this.fixedDt;
