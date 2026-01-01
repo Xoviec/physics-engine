@@ -336,7 +336,11 @@ class Game {
 
   addElementAt(x, y) {
     if (this.obstacleType === "rectangle") {
-      const angle = parseInt(this.obstacleAngleSlider.value);
+      let angle = parseInt(this.obstacleAngleSlider.value);
+      // Enforce minimum 10 degrees angle (no horizontal beams)
+      if (angle > -10 && angle < 10) {
+        angle = angle >= 0 ? 10 : -10;
+      }
       const width = parseInt(this.obstacleWidthSlider.value);
       const height = 12;
       const angleRad = (angle * Math.PI) / 180;
@@ -673,17 +677,29 @@ class Game {
       const y = startY + rowHeight * (row + 1);
       const pattern = Math.floor(Math.random() * 5);
 
+      // Minimum angle: 10 degrees = 0.175 radians
+      const minAngle = 0.18;
+
       switch (pattern) {
         case 0:
+          // Center beam with random tilt (no horizontal beams)
           const centerWidth = Math.min(
             maxBeamWidth,
             this.width - 2 * minGap - 2 * wallMargin
           );
-          this.addObstacle(centerX - centerWidth / 2, y, centerWidth, 12, 0);
+          const centerAngle =
+            (Math.random() > 0.5 ? 1 : -1) * (minAngle + Math.random() * 0.1);
+          this.addObstacle(
+            centerX - centerWidth / 2,
+            y,
+            centerWidth,
+            12,
+            centerAngle
+          );
           break;
 
         case 1:
-          const angle1 = 0.15 + Math.random() * 0.1;
+          const angle1 = minAngle + Math.random() * 0.15;
           const sideOffset1 = wallMargin + Math.random() * 20;
           const sideWidth1 = 80 + Math.random() * 20;
           const gapCheck1 = this.width - 2 * (sideOffset1 + sideWidth1);
@@ -700,7 +716,7 @@ class Game {
           break;
 
         case 2:
-          const funnelAngle = 0.2 + Math.random() * 0.1;
+          const funnelAngle = 0.2 + Math.random() * 0.15;
           const funnelWidth = 100;
           const funnelOffset = wallMargin;
           this.addObstacle(funnelOffset, y, funnelWidth, 12, funnelAngle);
@@ -716,20 +732,27 @@ class Game {
         case 3:
           const staggerWidth = 60;
           const staggerGap = minGap + 10;
+          const staggerAngle = minAngle + Math.random() * 0.1;
           this.addObstacle(
             centerX - staggerGap / 2 - staggerWidth,
             y,
             staggerWidth,
             12,
-            0.1
+            staggerAngle
           );
-          this.addObstacle(centerX + staggerGap / 2, y, staggerWidth, 12, -0.1);
+          this.addObstacle(
+            centerX + staggerGap / 2,
+            y,
+            staggerWidth,
+            12,
+            -staggerAngle
+          );
           break;
 
         case 4:
           const diagWidth = 70;
           const diagAngle =
-            (Math.random() > 0.5 ? 1 : -1) * (0.1 + Math.random() * 0.15);
+            (Math.random() > 0.5 ? 1 : -1) * (minAngle + Math.random() * 0.15);
           const diagX =
             wallMargin +
             minGap +
@@ -742,12 +765,14 @@ class Game {
       if (Math.random() > 0.75 && row < numRows - 1 && rowHeight > 80) {
         const bumperY = y + rowHeight / 2;
         const bumperWidth = 40;
+        const bumperAngle =
+          (Math.random() > 0.5 ? 1 : -1) * (minAngle + Math.random() * 0.1);
         this.addObstacle(
           centerX - bumperWidth / 2,
           bumperY,
           bumperWidth,
           10,
-          0
+          bumperAngle
         );
       }
     }
