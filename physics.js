@@ -117,7 +117,8 @@ class PhysicsEngine {
     this.bodies = [];
     this.gravity = new Vector2D(0, 0.5);
     this.bounds = { left: 0, right: 800, top: 0, bottom: 600 };
-    this.randomness = 0.15; // Amount of randomness in collisions (0-1)
+    this.angleRandomness = 0.35; // Random angle deviation (radians, ~20 degrees max)
+    this.speedRandomness = 0.25; // Random speed variation (±25%)
   }
 
   addBody(body) {
@@ -141,18 +142,24 @@ class PhysicsEngine {
     this.bounds = { left, right, top, bottom };
   }
 
-  // Add small random perturbation to velocity
+  // Add random perturbation to velocity (both angle and magnitude)
   addRandomness(vx, vy, speed) {
     if (speed < 0.5) return { vx, vy }; // Don't add randomness at low speeds
 
-    const randomAngle = (Math.random() - 0.5) * this.randomness;
+    // Random angle change
+    const randomAngle = (Math.random() - 0.5) * this.angleRandomness;
     const cos = Math.cos(randomAngle);
     const sin = Math.sin(randomAngle);
 
-    return {
-      vx: vx * cos - vy * sin,
-      vy: vx * sin + vy * cos,
-    };
+    let newVx = vx * cos - vy * sin;
+    let newVy = vx * sin + vy * cos;
+
+    // Random speed multiplier (sometimes harder, sometimes softer bounce)
+    const speedMultiplier = 1 + (Math.random() - 0.5) * this.speedRandomness;
+    newVx *= speedMultiplier;
+    newVy *= speedMultiplier;
+
+    return { vx: newVx, vy: newVy };
   }
 
   update(dt) {
