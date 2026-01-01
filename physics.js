@@ -96,27 +96,58 @@ class Circle extends PhysicsBody {
     ctx.translate(this.position.x, this.position.y);
 
     if (this.image) {
-      // Draw avatar image with rotation
-      ctx.rotate(this.angle);
+      // High quality image rendering
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+
+      // White background for images with transparency
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+
+      // Clip to circle
       ctx.beginPath();
       ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
       ctx.clip();
+
+      // Apply rotation
+      ctx.rotate(this.angle);
+
+      // Calculate "cover" sizing - fill the circle while maintaining aspect ratio
+      const img = this.image;
+      const imgAspect = img.width / img.height;
+      const diameter = this.radius * 2;
+
+      let drawWidth, drawHeight;
+      if (imgAspect > 1) {
+        // Image is wider - fit height, crop width
+        drawHeight = diameter;
+        drawWidth = diameter * imgAspect;
+      } else {
+        // Image is taller - fit width, crop height
+        drawWidth = diameter;
+        drawHeight = diameter / imgAspect;
+      }
+
+      // Center the image
       ctx.drawImage(
-        this.image,
-        -this.radius,
-        -this.radius,
-        this.radius * 2,
-        this.radius * 2
+        img,
+        -drawWidth / 2,
+        -drawHeight / 2,
+        drawWidth,
+        drawHeight
       );
+
       ctx.restore();
 
-      // Draw border around avatar
+      // Draw thick border for visibility
       ctx.save();
       ctx.translate(this.position.x, this.position.y);
       ctx.beginPath();
       ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
       ctx.strokeStyle = this.color;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
       ctx.restore();
     } else {
