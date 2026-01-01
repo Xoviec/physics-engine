@@ -463,6 +463,33 @@ class PhysicsEngine {
   }
 
   resolveCircleWindmill(circle, windmill) {
+    // Check collision with center hub (soft collision - just prevents passing through)
+    const hubRadius = 8; // Match visual size
+    const dx = circle.position.x - windmill.position.x;
+    const dy = circle.position.y - windmill.position.y;
+    const distToCenter = Math.sqrt(dx * dx + dy * dy);
+    const minDist = circle.radius + hubRadius;
+
+    if (distToCenter < minDist && distToCenter > 0) {
+      // Soft collision with center hub - just push out gently, no bounce
+      const nx = dx / distToCenter;
+      const ny = dy / distToCenter;
+      const penetration = minDist - distToCenter;
+
+      // Gently push circle out (no multiplier)
+      circle.position.x += nx * penetration;
+      circle.position.y += ny * penetration;
+
+      // Add gentle rotational push from spinning hub (carries the ball)
+      const tangentX = -ny;
+      const tangentY = nx;
+      const hubSpeed = hubRadius * windmill.rotationSpeed * windmill.direction;
+      circle.velocity.x += tangentX * hubSpeed * 0.3;
+      circle.velocity.y += tangentY * hubSpeed * 0.3;
+
+      // Don't return - still check arms so ball can be carried between them
+    }
+
     const arms = windmill.getArms();
 
     for (const arm of arms) {
@@ -503,35 +530,49 @@ class PhysicsEngine {
         }
 
         const penetration = circle.radius - distance;
-        circle.position.x += nx * penetration * 1.1;
-        circle.position.y += ny * penetration * 1.1;
+        circle.position.x += nx * penetration * 1.05;
+        circle.position.y += ny * penetration * 1.05;
 
-        // Calculate arm velocity at contact point
+        // Calculate arm velocity at contact point relative to windmill center
+        const contactFromCenterX = closestX - windmill.position.x;
+        const contactFromCenterY = closestY - windmill.position.y;
         const contactDist = Math.sqrt(
-          (closestX - arm.cx) ** 2 + (closestY - arm.cy) ** 2
+          contactFromCenterX ** 2 + contactFromCenterY ** 2
         );
-        const armSpeed =
-          contactDist * windmill.rotationSpeed * windmill.direction;
 
-        // Perpendicular direction (tangent to rotation)
-        const perpX = -Math.sin(arm.angle);
-        const perpY = Math.cos(arm.angle);
-
-        // Arm velocity at contact point
-        const armVelX = perpX * armSpeed;
-        const armVelY = perpY * armSpeed;
-
-        // Apply impulse from arm
-        const impulseFactor = 1.5;
-        circle.velocity.x += armVelX * impulseFactor;
-        circle.velocity.y += armVelY * impulseFactor;
-
-        // Standard collision response
-        const velAlongNormal = circle.velocity.x * nx + circle.velocity.y * ny;
-        if (velAlongNormal < 0) {
-          circle.velocity.x -= (1 + circle.restitution) * velAlongNormal * nx;
-          circle.velocity.y -= (1 + circle.restitution) * velAlongNormal * ny;
+        // Tangent direction for rotation (perpendicular to radius from center)
+        // For clockwise (direction=1): tangent = (-y, x) normalized
+        // For counter-clockwise (direction=-1): tangent = (y, -x) normalized
+        let tangentX, tangentY;
+        if (contactDist > 0) {
+          tangentX = (-contactFromCenterY / contactDist) * windmill.direction;
+          tangentY = (contactFromCenterX / contactDist) * windmill.direction;
+        } else {
+          tangentX = 0;
+          tangentY = 0;
         }
+
+        // Arm velocity at contact point (v = omega * r)
+        const armSpeed = contactDist * windmill.rotationSpeed;
+        const armVelX = tangentX * armSpeed;
+        const armVelY = tangentY * armSpeed;
+
+        // Calculate relative velocity (ball velocity minus arm velocity)
+        const relVelX = circle.velocity.x - armVelX;
+        const relVelY = circle.velocity.y - armVelY;
+
+        // Standard collision response using relative velocity
+        const velAlongNormal = relVelX * nx + relVelY * ny;
+        if (velAlongNormal < 0) {
+          const restitution = Math.min(circle.restitution, 0.5); // Limit bounce
+          circle.velocity.x -= (1 + restitution) * velAlongNormal * nx;
+          circle.velocity.y -= (1 + restitution) * velAlongNormal * ny;
+        }
+
+        // Transfer some arm velocity to ball (push effect)
+        const pushFactor = 0.8;
+        circle.velocity.x += armVelX * pushFactor;
+        circle.velocity.y += armVelY * pushFactor;
 
         // Add randomness
         const speed = Math.sqrt(
