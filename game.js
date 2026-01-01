@@ -24,6 +24,7 @@ class Game {
     this.wins = { player1: 0, player2: 0 };
     this.obstacles = [];
     this.windmills = [];
+    this.stages = [];
 
     this.finishLine = this.height - 40;
 
@@ -87,8 +88,8 @@ class Game {
 
   init() {
     this.bindEvents();
-    this.generateTrack();
-    this.createPlayers();
+    this.generateBalancedTrack();
+    // Don't call createPlayers() here - generateBalancedTrack() already does it
     requestAnimationFrame((t) => this.gameLoop(t));
   }
 
@@ -97,7 +98,9 @@ class Game {
     this.resetBtn.addEventListener("click", () => this.reset());
     this.editBtn.addEventListener("click", () => this.toggleEditMode());
     this.clearTrackBtn.addEventListener("click", () => this.clearTrack());
-    this.randomTrackBtn.addEventListener("click", () => this.generateTrack());
+    this.randomTrackBtn.addEventListener("click", () =>
+      this.generateBalancedTrack()
+    );
 
     // Obstacle type selection
     this.typeButtons.forEach((btn) => {
@@ -106,7 +109,6 @@ class Game {
         btn.classList.add("active");
         this.obstacleType = btn.dataset.type;
 
-        // Show/hide settings
         this.rectangleSettings.style.display =
           this.obstacleType === "rectangle" ? "block" : "none";
         this.windmillSettings.style.display =
@@ -114,7 +116,7 @@ class Game {
       });
     });
 
-    // Canvas events for adding obstacles
+    // Canvas events
     this.canvas.addEventListener("click", (e) => this.handleCanvasClick(e));
     this.canvas.addEventListener("mousemove", (e) => this.handleMouseMove(e));
     this.canvas.addEventListener(
@@ -158,24 +160,22 @@ class Game {
 
     // Obstacle sliders
     this.obstacleAngleSlider.addEventListener("input", (e) => {
-      const value = parseInt(e.target.value);
-      this.obstacleAngleValue.textContent = value + "°";
+      this.obstacleAngleValue.textContent = e.target.value + "°";
     });
 
     this.obstacleWidthSlider.addEventListener("input", (e) => {
-      const value = parseInt(e.target.value);
-      this.obstacleWidthValue.textContent = value;
+      this.obstacleWidthValue.textContent = e.target.value;
     });
 
     // Windmill sliders
     this.windmillSizeSlider.addEventListener("input", (e) => {
-      const value = parseInt(e.target.value);
-      this.windmillSizeValue.textContent = value;
+      this.windmillSizeValue.textContent = e.target.value;
     });
 
     this.windmillSpeedSlider.addEventListener("input", (e) => {
-      const value = parseFloat(e.target.value);
-      this.windmillSpeedValue.textContent = value.toFixed(2);
+      this.windmillSpeedValue.textContent = parseFloat(e.target.value).toFixed(
+        2
+      );
     });
   }
 
@@ -194,7 +194,7 @@ class Game {
     this.canvas.height = this.height;
     this.physics.setBounds(0, this.width, 0, this.height);
     this.finishLine = this.height - 40;
-    this.reset();
+    this.generateBalancedTrack();
   }
 
   toggleEditMode() {
@@ -203,7 +203,7 @@ class Game {
     this.editHint.classList.toggle("visible", this.editMode);
 
     if (this.editMode) {
-      this.reset();
+      this.resetPlayers();
       this.startBtn.disabled = true;
     } else {
       this.startBtn.disabled = false;
@@ -220,7 +220,6 @@ class Game {
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY + this.canvasWrapper.scrollTop;
 
-    // Don't add obstacles in start/finish zones
     if (y < 90 || y > this.finishLine - 20) return;
 
     if (this.obstacleType === "rectangle") {
@@ -259,6 +258,7 @@ class Game {
     const bounce = parseFloat(this.bounceSlider.value);
     const friction = parseFloat(this.frictionSlider.value);
 
+    // Symmetric starting positions
     this.player1 = new Circle(this.width * 0.35, 50, 18, 1);
     this.player1.restitution = bounce;
     this.player1.friction = friction;
@@ -271,7 +271,29 @@ class Game {
     this.physics.addBody(this.player2);
   }
 
+  removePlayers() {
+    if (this.player1) {
+      this.physics.removeBody(this.player1);
+      this.player1 = null;
+    }
+    if (this.player2) {
+      this.physics.removeBody(this.player2);
+      this.player2 = null;
+    }
+  }
+
+  resetPlayers() {
+    this.removePlayers();
+    this.createPlayers();
+    this.gameState = "waiting";
+    this.physics.setGravity(0, 0);
+    this.currentScrollY = 0;
+    this.targetScrollY = 0;
+    this.canvasWrapper.scrollTop = 0;
+  }
+
   clearTrack() {
+    // Remove obstacles
     for (const obs of this.obstacles) {
       this.physics.removeBody(obs);
     }
@@ -280,71 +302,255 @@ class Game {
     }
     this.obstacles = [];
     this.windmills = [];
-    this.reset();
+    this.stages = [];
+
+    // Reset players
+    this.resetPlayers();
   }
 
-  generateTrack() {
-    this.clearTrack();
+  /**
+   * Generate a balanced track with alternating stages
+   * All obstacles are symmetric to ensure equal chances
+   */
+  generateBalancedTrack() {
+    // Clear everything first
+    for (const obs of this.obstacles) {
+      this.physics.removeBody(obs);
+    }
+    for (const wm of this.windmills) {
+      this.physics.removeBody(wm);
+    }
+    this.obstacles = [];
+    this.windmills = [];
+    this.stages = [];
+    this.removePlayers();
 
-    const numRows = Math.floor((this.height - 160) / 70);
-    const rowHeight = (this.height - 160) / numRows;
     const startY = 100;
+    const endY = this.finishLine - 40;
+    const trackLength = endY - startY;
 
-    for (let row = 0; row < numRows; row++) {
-      const y = startY + row * rowHeight;
-      const config = Math.floor(Math.random() * 6);
+    // Calculate number of stages based on track length
+    const stageHeight = 150;
+    const numStages = Math.max(3, Math.floor(trackLength / stageHeight));
 
-      switch (config) {
-        case 0:
-          this.addObstacle(20, y, 160, 12, (Math.random() - 0.5) * 0.3);
-          break;
-        case 1:
-          this.addObstacle(
-            this.width - 180,
-            y,
-            160,
-            12,
-            (Math.random() - 0.5) * 0.3
-          );
-          break;
-        case 2:
-          this.addObstacle(
-            this.width / 2 - 70,
-            y,
-            140,
-            12,
-            (Math.random() - 0.5) * 0.4
-          );
-          break;
-        case 3:
-          this.addObstacle(15, y, 100, 12, 0.2);
-          this.addObstacle(this.width - 115, y, 100, 12, -0.2);
-          break;
-        case 4:
-          const offsetX = row % 2 === 0 ? 40 : this.width - 170;
-          this.addObstacle(offsetX, y, 130, 10, row % 2 === 0 ? 0.25 : -0.25);
-          break;
-        case 5:
-          // Add windmill
-          const wmX = 100 + Math.random() * (this.width - 200);
-          const wmDir = Math.random() > 0.5 ? 1 : -1;
-          this.addWindmill(wmX, y + 20, 50, 0.03, wmDir);
-          break;
-      }
+    for (let i = 0; i < numStages; i++) {
+      const stageStartY = startY + (i * trackLength) / numStages;
+      const stageEndY = startY + ((i + 1) * trackLength) / numStages;
 
-      if (Math.random() > 0.7) {
-        const smallX = 60 + Math.random() * (this.width - 150);
-        this.addObstacle(
-          smallX,
-          y + rowHeight / 2,
-          50,
-          10,
-          (Math.random() - 0.5) * 0.5
-        );
+      // Alternate between beam stages and windmill stages
+      const isWindmillStage = i % 2 === 1;
+
+      this.stages.push({
+        startY: stageStartY,
+        endY: stageEndY,
+        type: isWindmillStage ? "windmill" : "beam",
+      });
+
+      if (isWindmillStage) {
+        this.generateWindmillStage(stageStartY, stageEndY);
+      } else {
+        this.generateBeamStage(stageStartY, stageEndY);
       }
     }
 
+    // Create players at the end
     this.createPlayers();
+
+    // Reset state
+    this.gameState = "waiting";
+    this.physics.setGravity(0, 0);
+    this.currentScrollY = 0;
+    this.targetScrollY = 0;
+    this.canvasWrapper.scrollTop = 0;
+  }
+
+  /**
+   * Generate a symmetric beam stage
+   * Rules to prevent ball blocking:
+   * - Beams near walls must angle AWAY from wall (push balls toward center)
+   * - Minimum gap between beams: 50px (ball diameter ~36px + margin)
+   * - Minimum distance from wall: 45px
+   * - Never create angles that trap balls against walls
+   */
+  generateBeamStage(startY, endY) {
+    const stageHeight = endY - startY;
+    const numRows = Math.max(1, Math.floor(stageHeight / 70));
+    const rowHeight = stageHeight / (numRows + 1);
+
+    const centerX = this.width / 2;
+    const ballDiameter = 36; // Ball radius is 18
+    const minGap = 50; // Minimum gap for ball to pass
+    const wallMargin = 45; // Minimum distance from wall
+    const maxBeamWidth = 120; // Max beam width to ensure gaps
+
+    for (let row = 0; row < numRows; row++) {
+      const y = startY + rowHeight * (row + 1);
+
+      // Choose a symmetric pattern
+      const pattern = Math.floor(Math.random() * 5);
+
+      switch (pattern) {
+        case 0:
+          // Center obstacle - leaves gaps on both sides
+          // Max width so gaps remain: (width - maxBeamWidth) / 2 > minGap
+          const centerWidth = Math.min(
+            maxBeamWidth,
+            this.width - 2 * minGap - 2 * wallMargin
+          );
+          this.addObstacle(centerX - centerWidth / 2, y, centerWidth, 12, 0);
+          break;
+
+        case 1:
+          // Two side obstacles - angled AWAY from walls (positive angle on left pushes right)
+          // Left beam: positive angle, Right beam: negative angle
+          const angle1 = 0.15 + Math.random() * 0.1; // Always positive (slopes down-right)
+          const sideOffset1 = wallMargin + Math.random() * 20;
+          const sideWidth1 = 80 + Math.random() * 20;
+
+          // Ensure gap in center
+          const gapCheck1 = this.width - 2 * (sideOffset1 + sideWidth1);
+          if (gapCheck1 >= minGap) {
+            this.addObstacle(sideOffset1, y, sideWidth1, 12, angle1);
+            this.addObstacle(
+              this.width - sideOffset1 - sideWidth1,
+              y,
+              sideWidth1,
+              12,
+              -angle1
+            );
+          }
+          break;
+
+        case 2:
+          // Funnel - guides balls toward center (away from walls)
+          // Left beam angles DOWN-RIGHT (positive), Right beam angles DOWN-LEFT (negative)
+          const funnelAngle = 0.2 + Math.random() * 0.1;
+          const funnelWidth = 100;
+          const funnelOffset = wallMargin;
+
+          this.addObstacle(funnelOffset, y, funnelWidth, 12, funnelAngle);
+          this.addObstacle(
+            this.width - funnelOffset - funnelWidth,
+            y,
+            funnelWidth,
+            12,
+            -funnelAngle
+          );
+          break;
+
+        case 3:
+          // Staggered center obstacles with guaranteed gaps
+          const staggerWidth = 60;
+          const staggerGap = minGap + 10;
+
+          // Left-center beam
+          this.addObstacle(
+            centerX - staggerGap / 2 - staggerWidth,
+            y,
+            staggerWidth,
+            12,
+            0.1
+          );
+          // Right-center beam
+          this.addObstacle(centerX + staggerGap / 2, y, staggerWidth, 12, -0.1);
+          break;
+
+        case 4:
+          // Single diagonal with guaranteed passage on both sides
+          const diagWidth = 70;
+          const diagAngle =
+            (Math.random() > 0.5 ? 1 : -1) * (0.1 + Math.random() * 0.15);
+          // Place in center area, leaving wall gaps
+          const diagX =
+            wallMargin +
+            minGap +
+            Math.random() *
+              (this.width - 2 * wallMargin - 2 * minGap - diagWidth);
+          this.addObstacle(diagX, y, diagWidth, 12, diagAngle);
+          break;
+      }
+
+      // Small center bumper (only if enough space below)
+      if (Math.random() > 0.75 && row < numRows - 1 && rowHeight > 80) {
+        const bumperY = y + rowHeight / 2;
+        const bumperWidth = 40;
+        this.addObstacle(
+          centerX - bumperWidth / 2,
+          bumperY,
+          bumperWidth,
+          10,
+          0
+        );
+      }
+    }
+  }
+
+  /**
+   * Generate a symmetric windmill stage
+   * Guide beams angle AWAY from walls to prevent trapping
+   */
+  generateWindmillStage(startY, endY) {
+    const stageHeight = endY - startY;
+    const centerX = this.width / 2;
+    const centerY = (startY + endY) / 2;
+    const wallMargin = 50;
+
+    // Choose windmill pattern
+    const pattern = Math.floor(Math.random() * 3);
+
+    switch (pattern) {
+      case 0:
+        // Single center windmill - perfectly fair
+        this.addWindmill(centerX, centerY, 55, 0.025 + Math.random() * 0.02, 1);
+        break;
+
+      case 1:
+        // Two symmetric windmills with opposite rotation
+        const offset1 = 110;
+        const speed1 = 0.025 + Math.random() * 0.02;
+        this.addWindmill(centerX - offset1, centerY, 45, speed1, 1);
+        this.addWindmill(centerX + offset1, centerY, 45, speed1, -1);
+        break;
+
+      case 2:
+        // Three windmills - center + two sides (opposite rotation)
+        const offset2 = 130;
+        const speed2 = 0.02 + Math.random() * 0.015;
+        this.addWindmill(centerX, centerY - 20, 40, speed2, 1);
+        this.addWindmill(centerX - offset2, centerY + 25, 40, speed2, 1);
+        this.addWindmill(centerX + offset2, centerY + 25, 40, speed2, -1);
+        break;
+    }
+
+    // Add small guide beams at stage edges
+    // IMPORTANT: Angles push balls AWAY from walls (toward center)
+    // Left wall: positive angle (slopes down-right)
+    // Right wall: negative angle (slopes down-left)
+    if (stageHeight > 120) {
+      const guideY1 = startY + 30;
+      const guideY2 = endY - 30;
+      const guideWidth = 60;
+
+      // Entry guides - push toward center
+      this.addObstacle(wallMargin, guideY1, guideWidth, 10, 0.2);
+      this.addObstacle(
+        this.width - wallMargin - guideWidth,
+        guideY1,
+        guideWidth,
+        10,
+        -0.2
+      );
+
+      // Exit guides - push toward center
+      this.addObstacle(wallMargin, guideY2, guideWidth, 10, 0.2);
+      this.addObstacle(
+        this.width - wallMargin - guideWidth,
+        guideY2,
+        guideWidth,
+        10,
+        -0.2
+      );
+    }
   }
 
   addObstacle(x, y, width, height, angle = 0) {
@@ -378,18 +584,12 @@ class Game {
     this.startBtn.disabled = this.editMode;
     this.editBtn.disabled = false;
     this.winnerOverlay.classList.remove("active");
-    this.physics.setGravity(0, 0);
-    this.currentScrollY = 0;
-    this.targetScrollY = 0;
-    this.canvasWrapper.scrollTop = 0;
-
-    this.physics.removeBody(this.player1);
-    this.physics.removeBody(this.player2);
-    this.createPlayers();
+    this.resetPlayers();
   }
 
   autoScroll() {
     if (this.gameState !== "racing") return;
+    if (!this.player1 || !this.player2) return;
 
     const lowestY = Math.max(this.player1.position.y, this.player2.position.y);
 
@@ -407,6 +607,7 @@ class Game {
 
   checkWinner() {
     if (this.gameState !== "racing") return;
+    if (!this.player1 || !this.player2) return;
 
     const p1Finished =
       this.player1.position.y + this.player1.radius >= this.finishLine;
@@ -493,7 +694,6 @@ class Game {
     this.ctx.lineWidth = 2;
     this.ctx.setLineDash([4, 4]);
 
-    // Draw arms preview
     for (let i = 0; i < 4; i++) {
       const armAngle = (i * Math.PI * 2) / 4;
       this.ctx.save();
@@ -502,7 +702,6 @@ class Game {
       this.ctx.restore();
     }
 
-    // Draw center
     this.ctx.beginPath();
     this.ctx.arc(0, 0, 8, 0, Math.PI * 2);
     this.ctx.stroke();
@@ -511,9 +710,33 @@ class Game {
     this.ctx.setLineDash([]);
   }
 
+  drawStageIndicators() {
+    for (let i = 0; i < this.stages.length; i++) {
+      const stage = this.stages[i];
+
+      this.ctx.strokeStyle = stage.type === "windmill" ? "#e0e0ff" : "#ffe0e0";
+      this.ctx.lineWidth = 1;
+      this.ctx.setLineDash([10, 5]);
+      this.ctx.beginPath();
+      this.ctx.moveTo(0, stage.startY);
+      this.ctx.lineTo(this.width, stage.startY);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+
+      this.ctx.fillStyle = "#ccc";
+      this.ctx.font = "10px sans-serif";
+      this.ctx.textAlign = "left";
+      const label = stage.type === "windmill" ? "WIATRAKI" : "BELKI";
+      this.ctx.fillText(label, 5, stage.startY + 12);
+    }
+  }
+
   draw() {
     this.ctx.fillStyle = "#fff";
     this.ctx.fillRect(0, 0, this.width, this.height);
+
+    // Draw stage indicators
+    this.drawStageIndicators();
 
     // Center line (for mirror reference)
     if (this.editMode && this.mirrorModeCheckbox.checked) {
@@ -526,6 +749,14 @@ class Game {
       this.ctx.stroke();
       this.ctx.setLineDash([]);
     }
+
+    // Symmetry axis (always visible, subtle)
+    this.ctx.strokeStyle = "#f0f0f0";
+    this.ctx.lineWidth = 1;
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.width / 2, 80);
+    this.ctx.lineTo(this.width / 2, this.finishLine);
+    this.ctx.stroke();
 
     // Start line
     this.ctx.strokeStyle = "#ccc";
@@ -574,19 +805,21 @@ class Game {
     this.physics.draw(this.ctx);
 
     // Player labels
-    this.ctx.fillStyle = "#000";
-    this.ctx.font = "bold 11px sans-serif";
-    this.ctx.textAlign = "center";
-    this.ctx.fillText(
-      "1",
-      this.player1.position.x,
-      this.player1.position.y + 4
-    );
-    this.ctx.fillText(
-      "2",
-      this.player2.position.x,
-      this.player2.position.y + 4
-    );
+    if (this.player1 && this.player2) {
+      this.ctx.fillStyle = "#000";
+      this.ctx.font = "bold 11px sans-serif";
+      this.ctx.textAlign = "center";
+      this.ctx.fillText(
+        "1",
+        this.player1.position.x,
+        this.player1.position.y + 4
+      );
+      this.ctx.fillText(
+        "2",
+        this.player2.position.x,
+        this.player2.position.y + 4
+      );
+    }
 
     // Draw obstacle preview in edit mode
     this.drawObstaclePreview();
