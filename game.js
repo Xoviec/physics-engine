@@ -8,8 +8,15 @@ class Game {
     this.ctx = this.canvas.getContext("2d");
     this.canvasWrapper = document.getElementById("canvasWrapper");
 
-    this.width = 600;
-    this.height = 800;
+    // Resolution presets
+    this.resolutions = {
+      tiktok: { width: 390, height: 844 }, // iPhone 14 (9:19.5 ~= 9:16 for TikTok)
+      wide: { width: 854, height: 480 }, // 16:9 widescreen
+    };
+    this.currentResolution = "tiktok";
+
+    this.width = this.resolutions.tiktok.width;
+    this.height = this.resolutions.tiktok.height;
     this.canvas.width = this.width;
     this.canvas.height = this.height;
 
@@ -61,7 +68,7 @@ class Game {
     // Start spinner
     this.spinnerAngle = 0;
     this.spinnerSpeed = 0.05;
-    this.spinnerRadius = 100;
+    this.spinnerRadius = Math.min(100, this.width * 0.22); // Scale with width
     this.countdownTime = 0;
     this.countdownDuration = 3000; // 3 seconds
 
@@ -139,6 +146,8 @@ class Game {
     this.bindEvents();
     // Set avatar overlay height to match canvas
     this.avatarOverlay.style.height = `${this.height}px`;
+    // Set canvas wrapper max height
+    this.canvasWrapper.style.maxHeight = `${Math.min(this.height, 700)}px`;
     // Generate avatar input fields for current number of balls
     this.generateAvatarInputs();
     this.generateTrack();
@@ -159,6 +168,16 @@ class Game {
         btn.classList.add("active");
         this.gameMode = btn.dataset.mode;
         this.generateTrack();
+      });
+    });
+
+    // Resolution selection
+    this.resolutionButtons = document.querySelectorAll(".resolution-btn");
+    this.resolutionButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.resolutionButtons.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.setResolution(btn.dataset.resolution);
       });
     });
 
@@ -429,6 +448,36 @@ class Game {
     this.avatarOverlay.style.height = `${this.height}px`;
     this.physics.setBounds(0, this.width, 0, this.height);
     this.finishLine = this.height - 40;
+    this.generateTrack();
+  }
+
+  setResolution(resolutionKey) {
+    if (!this.resolutions[resolutionKey]) return;
+
+    this.currentResolution = resolutionKey;
+    const res = this.resolutions[resolutionKey];
+
+    this.width = res.width;
+    this.height = res.height;
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
+    this.avatarOverlay.style.height = `${this.height}px`;
+    this.physics.setBounds(0, this.width, 0, this.height);
+    this.finishLine = this.height - 40;
+
+    // Scale spinner radius with width
+    this.spinnerRadius = Math.min(100, this.width * 0.22);
+
+    // Update track length slider to match new height
+    if (this.trackLengthSlider) {
+      this.trackLengthSlider.value = this.height;
+      this.trackLengthValue.textContent = this.height;
+    }
+
+    // Update canvas wrapper max-height based on resolution
+    this.canvasWrapper.style.maxHeight = `${Math.min(res.height, 700)}px`;
+
+    // Regenerate track for new dimensions
     this.generateTrack();
   }
 

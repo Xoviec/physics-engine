@@ -89,8 +89,15 @@ body {
   border: 2px solid #000;
   background: #fff;
   overflow: auto;
-  max-height: 600px;
+  max-height: 700px;
   scroll-behavior: auto;
+  /* Hide scrollbar but keep functionality */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.canvas-wrapper::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 #gameCanvas {
@@ -269,6 +276,34 @@ body {
   text-align: right;
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.resolution-buttons {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+
+.resolution-btn {
+  flex: 1;
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.resolution-btn:hover {
+  border-color: #999;
+}
+
+.resolution-btn.active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
 }
 
 .obstacle-type-selector {
