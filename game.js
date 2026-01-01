@@ -10,7 +10,7 @@ class Game {
 
     // Resolution presets
     this.resolutions = {
-      tiktok: { width: 390, height: 844 }, // iPhone 14 (9:19.5 ~= 9:16 for TikTok)
+      tiktok: { width: 450, height: 800 }, // 9:16 TikTok/Reels
       wide: { width: 854, height: 480 }, // 16:9 widescreen
     };
     this.currentResolution = "tiktok";
@@ -95,12 +95,16 @@ class Game {
     this.editHint = document.getElementById("editHint");
     this.mirrorModeCheckbox = document.getElementById("mirrorMode");
     this.spinnerStartCheckbox = document.getElementById("spinnerStart");
+    this.showIntroCheckbox = document.getElementById("showIntro");
+    this.introOverlay = document.getElementById("introOverlay");
+    this.introContent = document.getElementById("introContent");
     this.modeButtons = document.querySelectorAll(".mode-btn");
     this.avatarOverlay = document.getElementById("avatarOverlay");
     this.avatarDivs = []; // HTML divs for high-quality avatar rendering
     this.avatarDataUrls = []; // Store original data URLs for high-quality rendering
     this.playerSounds = []; // Audio objects for each player
     this.currentLeader = -1; // Index of current leader (for sound switching)
+    this.introPlaying = false; // Track if intro is playing
 
     // Obstacle type buttons
     this.typeButtons = document.querySelectorAll(".type-btn");
@@ -1287,10 +1291,260 @@ class Game {
   }
 
   startRace() {
-    if (this.gameState !== "waiting" || this.editMode) return;
+    if (this.gameState !== "waiting" || this.editMode || this.introPlaying)
+      return;
 
     this.startBtn.disabled = true;
     this.editBtn.disabled = true;
+
+    // Check if intro should be shown
+    const showIntro = this.showIntroCheckbox && this.showIntroCheckbox.checked;
+
+    if (showIntro) {
+      this.playIntro(() => {
+        this.beginRace();
+      });
+    } else {
+      this.beginRace();
+    }
+  }
+
+  playIntro(callback) {
+    this.introPlaying = true;
+    this.gameState = "intro";
+    this.stopAllSounds();
+
+    // Check if spinner should be used
+    const useSpinner =
+      this.spinnerStartCheckbox && this.spinnerStartCheckbox.checked;
+
+    if (useSpinner) {
+      // Start spinner during intro
+      this.spinnerAngle = 0;
+      this.spinnerSpeed = 0.015;
+
+      // Position players inside spinner
+      const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+      const centerY = 90;
+      const numPlayers = this.players.length;
+      const arrangeRadius = Math.min(40, this.spinnerRadius * 0.4);
+
+      for (let i = 0; i < numPlayers; i++) {
+        const angle = (i / numPlayers) * Math.PI * 2 - Math.PI / 2;
+        this.players[i].position.x = centerX + Math.cos(angle) * arrangeRadius;
+        this.players[i].position.y = centerY + Math.sin(angle) * arrangeRadius;
+        this.players[i].velocity.x = 0;
+        this.players[i].velocity.y = 0;
+      }
+    }
+
+    // Build intro content
+    this.introContent.innerHTML = "";
+    this.introOverlay.classList.add("active");
+
+    const elements = [];
+
+    // Create elements for each player
+    for (let i = 0; i < this.numBalls; i++) {
+      // Add VS before player (except first)
+      if (i > 0) {
+        const vs = document.createElement("div");
+        vs.className = "intro-vs";
+        vs.textContent = "VS";
+        this.introContent.appendChild(vs);
+        elements.push({ type: "vs", element: vs });
+      }
+
+      // Add player avatar
+      const playerDiv = document.createElement("div");
+      playerDiv.className = "intro-player";
+      playerDiv.style.color = this.playerColors[i % this.playerColors.length];
+
+      const avatarDiv = document.createElement("div");
+      avatarDiv.className = "intro-avatar";
+      avatarDiv.style.borderColor =
+        this.playerColors[i % this.playerColors.length];
+
+      if (this.avatarDataUrls[i]) {
+        const img = document.createElement("img");
+        img.src = this.avatarDataUrls[i];
+        avatarDiv.appendChild(img);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "placeholder";
+        avatarDiv.appendChild(placeholder);
+      }
+
+      playerDiv.appendChild(avatarDiv);
+      this.introContent.appendChild(playerDiv);
+      elements.push({ type: "player", element: playerDiv, index: i });
+    }
+
+    // Animate elements sequentially
+    let currentIndex = 0;
+    const showDelay = 1100; // 1.1 seconds per reveal
+
+    const showNext = () => {
+      if (currentIndex >= elements.length) {
+        // All shown, wait a moment then finish
+        setTimeout(() => {
+          this.hideIntro();
+          callback();
+        }, 1000);
+        return;
+      }
+
+      const item = elements[currentIndex];
+
+      if (item.type === "vs") {
+        // Show VS
+        item.element.classList.add("visible");
+        currentIndex++;
+        setTimeout(showNext, 300); // Short delay before next player
+      } else {
+        // Show player and play sound
+        item.element.classList.add("visible");
+
+        // Play player's sound if available
+        if (this.playerSounds[item.index]) {
+          this.stopAllSounds();
+          this.playerSounds[item.index].currentTime = 0;
+          this.playerSounds[item.index].play().catch(() => {});
+        }
+
+        currentIndex++;
+        setTimeout(showNext, showDelay);
+      }
+    };
+
+    // Start showing elements after brief delay
+    setTimeout(showNext, 500);
+  }
+
+  updateIntroSpinner() {
+    // Update spinner animation during intro
+    if (this.gameState !== "intro") return;
+
+    const useSpinner =
+      this.spinnerStartCheckbox && this.spinnerStartCheckbox.checked;
+    if (!useSpinner) return;
+
+    // Gradually speed up spinner
+    this.spinnerSpeed = Math.min(0.06, this.spinnerSpeed + 0.0001);
+    this.spinnerAngle += this.spinnerSpeed;
+
+    // Apply spinner physics to balls (tumbling effect)
+    const centerX = this.gameMode === "serpentine" ? 100 : this.width / 2;
+    const centerY = 90;
+    const radius = this.spinnerRadius;
+    const gravity = parseFloat(this.gravitySlider.value);
+    const spinnerFriction = 0.03;
+
+    for (const ball of this.players) {
+      // Apply gravity
+      ball.velocity.y += gravity;
+
+      // Apply friction
+      ball.velocity.x *= 1 - spinnerFriction;
+      ball.velocity.y *= 1 - spinnerFriction;
+
+      // Constrain to spinner circle
+      const dx = ball.position.x - centerX;
+      const dy = ball.position.y - centerY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const maxDist = radius - ball.radius - 1;
+
+      // Calculate tangent direction (rotation direction)
+      const tangentX = -dy / (dist || 1);
+      const tangentY = dx / (dist || 1);
+
+      // Apply continuous rotational drag from spinning drum
+      const dragStrength = (dist / radius) * this.spinnerSpeed * 8;
+      ball.velocity.x += tangentX * dragStrength;
+      ball.velocity.y += tangentY * dragStrength;
+
+      if (dist > maxDist && dist > 0) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+
+        ball.position.x = centerX + nx * maxDist;
+        ball.position.y = centerY + ny * maxDist;
+
+        const dot = ball.velocity.x * nx + ball.velocity.y * ny;
+        if (dot > 0) {
+          ball.velocity.x -= (1 + ball.restitution * 0.4) * dot * nx;
+          ball.velocity.y -= (1 + ball.restitution * 0.4) * dot * ny;
+        }
+
+        const wallPush = this.spinnerSpeed * 12;
+        ball.velocity.x += tangentX * wallPush;
+        ball.velocity.y += tangentY * wallPush;
+      }
+
+      ball.position.x += ball.velocity.x;
+      ball.position.y += ball.velocity.y;
+    }
+
+    // Ball-to-ball collisions inside spinner
+    for (let i = 0; i < this.players.length; i++) {
+      for (let j = i + 1; j < this.players.length; j++) {
+        const a = this.players[i];
+        const b = this.players[j];
+
+        const dx = b.position.x - a.position.x;
+        const dy = b.position.y - a.position.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = a.radius + b.radius;
+
+        if (dist < minDist && dist > 0) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = (minDist - dist) / 2;
+
+          a.position.x -= nx * overlap;
+          a.position.y -= ny * overlap;
+          b.position.x += nx * overlap;
+          b.position.y += ny * overlap;
+
+          const relVel =
+            (a.velocity.x - b.velocity.x) * nx +
+            (a.velocity.y - b.velocity.y) * ny;
+          if (relVel > 0) {
+            const restitution = 0.75;
+            a.velocity.x -= relVel * nx * restitution;
+            a.velocity.y -= relVel * ny * restitution;
+            b.velocity.x += relVel * nx * restitution;
+            b.velocity.y += relVel * ny * restitution;
+          }
+        }
+      }
+    }
+
+    // Clamp velocities
+    const maxSpeed = 30;
+    for (const ball of this.players) {
+      const speed = Math.sqrt(ball.velocity.x ** 2 + ball.velocity.y ** 2);
+      if (speed > maxSpeed) {
+        const scale = maxSpeed / speed;
+        ball.velocity.x *= scale;
+        ball.velocity.y *= scale;
+      }
+    }
+  }
+
+  hideIntro() {
+    this.introPlaying = false;
+    this.introOverlay.classList.remove("active");
+    // Reset overlay position
+    this.introOverlay.style.top = "0";
+    this.introOverlay.style.height = "100%";
+    this.stopAllSounds();
+    // Clear confetti
+    const confetti = this.introOverlay.querySelectorAll(".confetti");
+    confetti.forEach((c) => c.remove());
+  }
+
+  beginRace() {
     this.currentScrollY = 0;
     this.targetScrollY = 0;
     this.canvasWrapper.scrollTop = 0;
@@ -1298,9 +1552,17 @@ class Game {
     // Enable gravity
     this.physics.setGravity(0, parseFloat(this.gravitySlider.value));
 
-    // Check if spinner start is enabled
+    // Check if spinner was used during intro
     const useSpinner =
       this.spinnerStartCheckbox && this.spinnerStartCheckbox.checked;
+    const hadIntro = this.showIntroCheckbox && this.showIntroCheckbox.checked;
+
+    if (useSpinner && hadIntro) {
+      // Spinner was already running during intro - release balls immediately
+      this.gameState = "racing";
+      // Balls already have velocity from spinner tumbling
+      return;
+    }
 
     if (useSpinner) {
       // Start countdown with spinner
@@ -1469,9 +1731,17 @@ class Game {
     this.startBtn.disabled = this.editMode;
     this.editBtn.disabled = false;
     this.winnerOverlay.classList.remove("active");
+    this.introOverlay.classList.remove("active");
+    // Reset overlay position
+    this.introOverlay.style.top = "0";
+    this.introOverlay.style.height = "100%";
+    this.introPlaying = false;
     this.spinnerSpeed = 0.08;
     this.countdownTime = 0;
     this.stopAllSounds();
+    // Clear confetti
+    const confetti = this.introOverlay.querySelectorAll(".confetti");
+    confetti.forEach((c) => c.remove());
     this.resetPlayers();
   }
 
@@ -1524,11 +1794,101 @@ class Game {
       if (this.wins[0] !== undefined) this.wins1El.textContent = this.wins[0];
       if (this.wins[1] !== undefined) this.wins2El.textContent = this.wins[1];
 
-      this.winnerText.textContent = `GRACZ ${winnerNum} WYGRYWA!`;
-      this.winnerText.className = `winner-text player${winnerNum}`;
-      this.winnerOverlay.classList.add("active");
-      this.startBtn.disabled = false;
-      this.editBtn.disabled = false;
+      // Show winner celebration on intro overlay
+      this.showWinnerCelebration(winner.index, winnerNum);
+    }
+  }
+
+  showWinnerCelebration(winnerIndex, winnerNum) {
+    // Build winner celebration content
+    this.introContent.innerHTML = "";
+
+    // Clear any existing confetti
+    const existingConfetti = this.introOverlay.querySelectorAll(".confetti");
+    existingConfetti.forEach((c) => c.remove());
+
+    // Add confetti
+    this.createConfetti();
+
+    // Winner avatar
+    const playerDiv = document.createElement("div");
+    playerDiv.className = "intro-player visible";
+    playerDiv.style.color =
+      this.playerColors[winnerIndex % this.playerColors.length];
+
+    const avatarDiv = document.createElement("div");
+    avatarDiv.className = "intro-avatar winner-avatar";
+    avatarDiv.style.borderColor =
+      this.playerColors[winnerIndex % this.playerColors.length];
+    avatarDiv.style.width = "120px";
+    avatarDiv.style.height = "120px";
+
+    if (this.avatarDataUrls[winnerIndex]) {
+      const img = document.createElement("img");
+      img.src = this.avatarDataUrls[winnerIndex];
+      avatarDiv.appendChild(img);
+    } else {
+      const placeholder = document.createElement("div");
+      placeholder.className = "placeholder";
+      placeholder.style.width = "90px";
+      placeholder.style.height = "90px";
+      avatarDiv.appendChild(placeholder);
+    }
+
+    playerDiv.appendChild(avatarDiv);
+
+    // Winner text
+    const winnerText = document.createElement("div");
+    winnerText.className = "intro-winner-text";
+    winnerText.textContent = "WINNER";
+    winnerText.style.color =
+      this.playerColors[winnerIndex % this.playerColors.length];
+    playerDiv.appendChild(winnerText);
+
+    this.introContent.appendChild(playerDiv);
+
+    // Position overlay at current scroll position
+    const scrollTop = this.canvasWrapper.scrollTop;
+    const viewHeight = this.canvasWrapper.clientHeight;
+    this.introOverlay.style.top = scrollTop + "px";
+    this.introOverlay.style.height = viewHeight + "px";
+    this.introOverlay.classList.add("active");
+
+    // Play winner's sound
+    if (this.playerSounds[winnerIndex]) {
+      this.playerSounds[winnerIndex].currentTime = 0;
+      this.playerSounds[winnerIndex].play().catch(() => {});
+    }
+
+    this.startBtn.disabled = false;
+    this.editBtn.disabled = false;
+  }
+
+  createConfetti() {
+    const colors = [
+      "#ff0000",
+      "#00ff00",
+      "#0000ff",
+      "#ffff00",
+      "#ff00ff",
+      "#00ffff",
+      "#ffa500",
+      "#ff69b4",
+      "#gold",
+      "#silver",
+    ];
+    const confettiCount = 60;
+
+    for (let i = 0; i < confettiCount; i++) {
+      const confetti = document.createElement("div");
+      confetti.className = "confetti";
+      confetti.style.left = Math.random() * 100 + "%";
+      confetti.style.backgroundColor =
+        colors[Math.floor(Math.random() * colors.length)];
+      confetti.style.animationDelay = Math.random() * 3 + "s";
+      confetti.style.animationDuration = 2.5 + Math.random() * 2 + "s";
+      confetti.style.setProperty("--drift", (Math.random() - 0.5) * 200 + "px");
+      this.introOverlay.appendChild(confetti);
     }
   }
 
@@ -1715,9 +2075,13 @@ class Game {
 
     this.physics.draw(this.ctx);
 
-    // Draw spinner during countdown
-    if (this.gameState === "countdown") {
-      this.drawSpinner();
+    // Draw spinner during intro or countdown
+    if (this.gameState === "countdown" || this.gameState === "intro") {
+      const useSpinner =
+        this.spinnerStartCheckbox && this.spinnerStartCheckbox.checked;
+      if (useSpinner) {
+        this.drawSpinner();
+      }
     }
 
     // Draw highlight for hovered element in move/delete mode
@@ -1760,25 +2124,35 @@ class Game {
 
     this.ctx.restore();
 
-    // Countdown number
-    const secondsLeft = Math.ceil(
-      (this.countdownDuration - this.countdownTime) / 1000
-    );
-    if (secondsLeft > 0 && this.countdownTime < this.countdownDuration - 200) {
-      this.ctx.fillStyle = "#000";
-      this.ctx.font = "bold 28px sans-serif";
-      this.ctx.textAlign = "center";
-      this.ctx.textBaseline = "middle";
-      this.ctx.fillText(secondsLeft.toString(), centerX, centerY + radius + 30);
-    }
+    // Only show countdown text during countdown state (not intro)
+    if (this.gameState === "countdown") {
+      // Countdown number
+      const secondsLeft = Math.ceil(
+        (this.countdownDuration - this.countdownTime) / 1000
+      );
+      if (
+        secondsLeft > 0 &&
+        this.countdownTime < this.countdownDuration - 200
+      ) {
+        this.ctx.fillStyle = "#000";
+        this.ctx.font = "bold 28px sans-serif";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText(
+          secondsLeft.toString(),
+          centerX,
+          centerY + radius + 30
+        );
+      }
 
-    // "GO!" text when launching
-    if (this.countdownTime >= this.countdownDuration - 200) {
-      this.ctx.fillStyle = "#000";
-      this.ctx.font = "bold 36px sans-serif";
-      this.ctx.textAlign = "center";
-      this.ctx.textBaseline = "middle";
-      this.ctx.fillText("GO!", centerX, centerY + radius + 30);
+      // "GO!" text when launching
+      if (this.countdownTime >= this.countdownDuration - 200) {
+        this.ctx.fillStyle = "#000";
+        this.ctx.font = "bold 36px sans-serif";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText("GO!", centerX, centerY + radius + 30);
+      }
     }
   }
 
@@ -1825,6 +2199,15 @@ class Game {
     this.lastTime = timestamp;
 
     this.accumulator += deltaTime;
+
+    // Update intro spinner (during VS intro)
+    if (this.gameState === "intro") {
+      this.updateIntroSpinner();
+      // Update windmills during intro for visual effect
+      for (const wm of this.windmills) {
+        wm.update(1);
+      }
+    }
 
     // Update countdown spinner (has its own physics)
     if (this.gameState === "countdown") {

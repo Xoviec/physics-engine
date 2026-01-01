@@ -149,6 +149,156 @@ body {
   text-align: center;
 }
 
+/* Intro VS overlay */
+.intro-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.intro-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.intro-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 20px;
+}
+
+.intro-player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.intro-player.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.intro-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 4px solid #000;
+  overflow: hidden;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.intro-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.intro-avatar .placeholder {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.intro-vs {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #000;
+  opacity: 0;
+  transform: scale(0);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.intro-vs.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.intro-winner-text {
+  font-size: 1.5rem;
+  font-weight: 800;
+  text-align: center;
+  margin-top: 15px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.winner-avatar {
+  animation: winner-pulse 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes winner-pulse {
+  from {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 currentColor;
+  }
+  to {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px 5px currentColor;
+  }
+}
+
+/* Confetti */
+.confetti {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  top: -10px;
+  opacity: 0;
+  animation: confetti-fall linear forwards;
+}
+
+.confetti:nth-child(odd) {
+  width: 8px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.confetti:nth-child(even) {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+@keyframes confetti-fall {
+  0% {
+    top: -10px;
+    opacity: 1;
+    transform: translateX(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+    transform: translateX(var(--drift, 0px)) rotate(720deg);
+  }
+}
+
 .controls {
   display: flex;
   gap: 10px;
